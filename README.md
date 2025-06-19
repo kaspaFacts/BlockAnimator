@@ -1,2 +1,4 @@
 # BlockAnimator
 Create Animations using PyGame and Output to MP4 using OpenCV
+
+Currently an empty skeleton for using pygame to build animations and output to mp4 using OpenCV
