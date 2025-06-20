@@ -14,3 +14,6 @@ To run a demo, check what demo will be run at the bottom of demo.py, comment out
 
 
 FiftyBlocksDemo takes less than 1 second to generate 240p at 15 FPS, and 63 sec to generate 1080p at 60FPS
+
+
+NOTE: only the functions in the demo have been tested with the rendering and updated coord system
