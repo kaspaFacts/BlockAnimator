@@ -49,7 +49,7 @@ class AnimationController:
                 scene.coords.set_camera_position(current_x, current_y)
             return
 
-        # For sprite animations, get the sprite
+            # For sprite animations, get the sprite
         sprite = sprites.get(sprite_id)
         if not sprite:
             return
@@ -59,9 +59,14 @@ class AnimationController:
             sprite.set_visible(True)
 
         elif anim_type == 'move_to':
-            # Calculate grid positions instead of pixel positions
-            start_grid_x = animation['start_grid_x']
-            start_grid_y = animation['start_grid_y']
+            # Capture start position on first frame if not already captured
+            if 'actual_start_grid_x' not in animation:
+                animation['actual_start_grid_x'] = sprite.grid_x
+                animation['actual_start_grid_y'] = sprite.grid_y
+
+                # Use the captured actual start positions
+            start_grid_x = animation['actual_start_grid_x']
+            start_grid_y = animation['actual_start_grid_y']
             target_grid_x = animation['target_grid_x']
             target_grid_y = animation['target_grid_y']
 

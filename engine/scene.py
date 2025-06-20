@@ -7,8 +7,16 @@ from engine.sprites.block import Block
 from engine.sprites.line import Connection
 
 
+class TimelineEvent:
+    def __init__(self, trigger_frame, event_type, **kwargs):
+        self.trigger_frame = trigger_frame
+        self.event_type = event_type
+        self.kwargs = kwargs
+        self.executed = False
+
 class Scene:
     def __init__(self, resolution='720p', fps=30, field_height=50):
+
         resolutions = {
             '240p': (426, 240),
             '480p': (854, 480),
@@ -26,8 +34,7 @@ class Scene:
         # Proportional coordinate system
         self.coords = CoordinateSystem(
             self.width, self.height,
-            field_height=field_height,
-            base_resolution=resolution  # Reference resolution
+            field_height=field_height
         )
 
         # Animation system
@@ -45,9 +52,18 @@ class Scene:
         self.current_time = 0.0
         self.scene_duration = 0.0
 
-        # Camera position tracking for animation chaining
-        self.expected_camera_x = 0.0
-        self.expected_camera_y = 0.0
+        self.timeline_events = []  # Add this new attribute
+        self.scene_duration_frames = 0  # Add this new attribute
+
+    def schedule_at_frame(self, frame, event_type, **kwargs):
+        """Schedule an event to happen at a specific frame during rendering."""
+        event = TimelineEvent(frame, event_type, **kwargs)
+        self.timeline_events.append(event)
+        # Update scene duration to include this event
+        duration_frames = kwargs.get('duration_frames', 0)
+        self.scene_duration_frames = max(self.scene_duration_frames, frame + duration_frames)
+        # Convert to time for compatibility
+        self.scene_duration = self.scene_duration_frames / self.fps
 
     def construct(self):
         """Override this method to define your scene animations."""
@@ -111,44 +127,33 @@ class Scene:
                 sprite.update_line()
 
     def play(self, *animations, duration=1.0):
-        """Play animations sequentially."""
-        start_time = self.current_time
+        """Convert time-based play to frame-based scheduling."""
+        current_frame = int(self.current_time * self.fps)
 
-        # Flatten any nested lists of animations
+        # Flatten any nested lists of animations first
         flattened_animations = []
         for anim in animations:
             if isinstance(anim, list):
                 flattened_animations.extend(anim)
-            else:
+            elif anim is not None:  # Handle None animations
                 flattened_animations.append(anim)
 
         for animation in flattened_animations:
-            # For camera animations, use tracking variables instead of actual camera position
-            if animation.get('type') == 'camera_move':
-                animation['start_x'] = self.expected_camera_x
-                animation['start_y'] = self.expected_camera_y
+            if animation:  # Double-check it's not None
+                duration_frames = int(duration * self.fps)
+                animation['duration_frames'] = duration_frames
+                self.schedule_at_frame(current_frame, 'start_animation', animation=animation)
 
-                # Update our tracking of where camera will be after this animation
-                if 'target_x' in animation:
-                    self.expected_camera_x = animation['target_x']
-                    self.expected_camera_y = animation['target_y']
-                elif 'delta_x' in animation:
-                    animation['target_x'] = self.expected_camera_x + animation['delta_x']
-                    animation['target_y'] = self.expected_camera_y + animation['delta_y']
-                    self.expected_camera_x = animation['target_x']
-                    self.expected_camera_y = animation['target_y']
-
-            anim_duration = animation.get('duration', duration)
-            animation['start_time'] = start_time
-            animation['duration'] = anim_duration
-            self.animation_controller.add_animation(animation)
-
+                # Update current time and frame tracking
         self.current_time += duration
+        self.scene_duration_frames = max(self.scene_duration_frames, int(self.current_time * self.fps))
         self.scene_duration = max(self.scene_duration, self.current_time)
 
     def wait(self, duration):
-        """Add a pause."""
+        """Add a pause in frames."""
         self.current_time += duration
+        wait_frames = int(duration * self.fps)
+        self.scene_duration_frames = max(self.scene_duration_frames, int(self.current_time * self.fps))
         self.scene_duration = max(self.scene_duration, self.current_time)
 
     def render(self, filename=None):
@@ -163,46 +168,24 @@ class Scene:
         renderer = VideoRenderer(self, filename)
         renderer.generate_video()
 
-    def move_sprite_to(self, sprite_id, target_grid_pos, run_time=1.0):
-        """Move any sprite to absolute grid position."""
+    def move_to(self, sprite_id, target_pos, duration=1.0):
+        """Create movement animation using current sprite positions."""
         if sprite_id not in self.sprite_registry:
             return None
 
         sprite = self.sprite_registry[sprite_id]
-        current_x, current_y = sprite.grid_x, sprite.grid_y
-        target_x, target_y = target_grid_pos
+        start_x, start_y = sprite.grid_x, sprite.grid_y
+        target_x, target_y = target_pos
 
         return {
             'type': 'move_to',
             'sprite_id': sprite_id,
-            'start_grid_x': current_x,
-            'start_grid_y': current_y,
+            'start_grid_x': start_x,
+            'start_grid_y': start_y,
             'target_grid_x': target_x,
-            'target_grid_y': target_y
+            'target_grid_y': target_y,
+            'duration': duration
         }
-
-    def center_camera_on_sprite(self, sprite_id):
-        """Center camera on a specific sprite."""
-        if sprite_id in self.sprite_registry:
-            sprite = self.sprite_registry[sprite_id]
-
-            # Calculate field dimensions
-            aspect_ratio = self.width / self.height
-            horizontal_field = 50 * aspect_ratio
-
-            # Center camera on sprite
-            camera_x = sprite.grid_x - (horizontal_field / 2)
-            camera_y = sprite.grid_y - 25
-
-            self.coords.set_camera_position(camera_x, camera_y)
-
-    def move_camera(self, delta_x, delta_y):
-        """Move camera by grid steps."""
-        self.coords.move_camera(delta_x, delta_y)
-
-    def set_camera_position(self, grid_x, grid_y):
-        """Set absolute camera position."""
-        self.coords.set_camera_position(grid_x, grid_y)
 
     def animate_camera_to_sprite(self, sprite_id, duration=1.0):
         """Create an animation to move camera to sprite."""

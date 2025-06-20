@@ -23,7 +23,7 @@ class BlockDAGDemo(Scene):
         # Move blocks using absolute positioning instead of shift
         # Move Y block to a new absolute position
         new_y_pos = (35, 18)
-        self.play(self.move_sprite_to("Y", new_y_pos, run_time=2))
+        self.play(self.move_to("Y", new_y_pos, duration=2))
 
         self.wait(3)
 
@@ -112,13 +112,29 @@ class FiftyBlocksDemo(Scene):
 
             # Use Scene's move_to method instead of BD.shift()
             move_animations.append(
-                self.move_sprite_to(block_id, (new_x, new_y), run_time=2.0)
+                self.move_to(block_id, (new_x, new_y))
             )
 
             # Play all move animations simultaneously
         self.play(*move_animations)
 
         self.wait(2)
+        # Create animations to move all blocks back to original positions
+        return_animations = []
+        for i, block_id in enumerate(block_ids):
+            # Recalculate original position using same logic as initial placement
+            row = i // 10
+            col = i % 10
+            original_x = start_x + col * spacing_x
+            original_y = start_y + row * spacing_y
+
+            return_animations.append(
+                self.move_to(block_id, (original_x, original_y), duration=2.0)
+            )
+
+            # Play all return animations simultaneously
+        self.play(*return_animations)
+        self.wait(2)  # Final pause to show the restored grid
 
 if __name__ == "__main__":
 #    scene = BlockCameraDemo()
