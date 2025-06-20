@@ -1,14 +1,14 @@
 # engine/scene.py
 import pygame
-from coordinate_system import CoordinateSystem
-from animation_controller import AnimationController
-from renderer import VideoRenderer
-from sprites.block import Block
-from sprites.line import Connection
+from engine.coordinate_system import CoordinateSystem
+from engine.animation_controller import AnimationController
+from engine.renderer import VideoRenderer
+from engine.sprites.block import Block
+from engine.sprites.line import Connection
 
 
 class Scene:
-    def __init__(self, resolution='720p', fps=30, base_grid_size=50):
+    def __init__(self, resolution='720p', fps=30, field_height=50):
         resolutions = {
             '240p': (426, 240),
             '480p': (854, 480),
@@ -26,8 +26,8 @@ class Scene:
         # Proportional coordinate system
         self.coords = CoordinateSystem(
             self.width, self.height,
-            base_grid_size=base_grid_size,
-            base_resolution=(1280, 720)  # Reference resolution
+            field_height=field_height,
+            base_resolution=resolution  # Reference resolution
         )
 
         # Animation system
@@ -62,6 +62,7 @@ class Scene:
         sprite = Block(
             pixel_x, pixel_y,
             sprite_id=sprite_id,
+            grid_size=self.coords.grid_size,  # Automatically pass grid_size
             text=text,
             **kwargs
         )
@@ -161,6 +162,24 @@ class Scene:
 
         renderer = VideoRenderer(self, filename)
         renderer.generate_video()
+
+    def move_sprite_to(self, sprite_id, target_grid_pos, run_time=1.0):
+        """Move any sprite to absolute grid position."""
+        if sprite_id not in self.sprite_registry:
+            return None
+
+        sprite = self.sprite_registry[sprite_id]
+        current_x, current_y = sprite.grid_x, sprite.grid_y
+        target_x, target_y = target_grid_pos
+
+        return {
+            'type': 'move_to',
+            'sprite_id': sprite_id,
+            'start_grid_x': current_x,
+            'start_grid_y': current_y,
+            'target_grid_x': target_x,
+            'target_grid_y': target_y
+        }
 
     def center_camera_on_sprite(self, sprite_id):
         """Center camera on a specific sprite."""

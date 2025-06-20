@@ -5,16 +5,18 @@ import pygame
 class Block(pygame.sprite.Sprite):
     """A simple block sprite."""
 
-    def __init__(self, x, y, sprite_id, text="Block", size=60, color=(255, 0, 0)):
+    def __init__(self, x, y, sprite_id, grid_size, text="Block", color=(255, 0, 0)):
         super().__init__()
 
+        # Always calculate size based on grid_size (no fallback)
+        self.size = int(grid_size * 5)  # 500% of grid unit
+        self.grid_size = grid_size
         self.sprite_id = sprite_id
-        self.size = size
         self.color = color
         self.text = text
 
         # Create surface
-        self.image = pygame.Surface((size + 10, size + 10), pygame.SRCALPHA)
+        self.image = pygame.Surface((self.size + 10, self.size + 10), pygame.SRCALPHA)
         self.rect = self.image.get_rect(center=(x, y))
 
         # Store both pixel and grid positions
@@ -30,9 +32,12 @@ class Block(pygame.sprite.Sprite):
         # List of connections observing this block's alpha
         self.alpha_observers = []
 
+        # Calculate font size proportionally to grid_size
+        font_size = max(int(grid_size * 2), 8)  # 30% of grid unit, minimum 8px
+
         # Font
         pygame.font.init()
-        self.font = pygame.font.Font(None, 24)
+        self.font = pygame.font.Font(None, font_size)
 
         self.render()
 
@@ -46,7 +51,9 @@ class Block(pygame.sprite.Sprite):
             # Draw block
         block_rect = pygame.Rect(5, 5, self.size, self.size)
         pygame.draw.rect(self.image, self.color, block_rect)
-        pygame.draw.rect(self.image, (255, 255, 255), block_rect, 3)
+        # Calculate outline width proportionally to grid_size
+        outline_width = max(int(self.grid_size * 0.25), 1)  # 10% of grid unit, minimum 1px
+        pygame.draw.rect(self.image, (255, 255, 255), block_rect, outline_width)
 
         # Draw text
         text_surface = self.font.render(self.text, True, (255, 255, 255))
