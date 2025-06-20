@@ -121,9 +121,9 @@ class FiftyBlocksDemo(Scene):
         self.wait(2)
 
 if __name__ == "__main__":
-    scene = BlockCameraDemo()
+#    scene = BlockCameraDemo()
 #    scene = BlockDAGDemo()
-#    scene = FiftyBlocksDemo()
+    scene = FiftyBlocksDemo()
     scene.construct()
     scene.render()
 

@@ -3,6 +3,7 @@
 import cv2
 import numpy as np
 import pygame
+import time
 
 class VideoRenderer:
     """Renders scene to video."""
@@ -28,6 +29,8 @@ class VideoRenderer:
     def generate_video(self):
         """Generate the video."""
         print(f"Generating {self.total_frames} frames...")
+        # Start timing
+        start_time = time.time()
 
         try:
             for frame_num in range(max(1, self.total_frames)):
@@ -64,13 +67,17 @@ class VideoRenderer:
                                        f"File may be locked by another application.")
 
                 if frame_num % 30 == 0:
-                    print(f"Progress: {frame_num}/{self.total_frames}")
+                    elapsed = time.time() - start_time
+                    print(f"Progress: {frame_num}/{self.total_frames} - Elapsed: {elapsed:.2f}s")
 
             self.video_writer.release()
-            print("Video generation complete!")
+            # Calculate and display total rendering time
+            total_time = time.time() - start_time
+            print(f"Video generation complete! Total rendering time: {total_time:.2f} seconds")
 
         except Exception as e:
             # Clean up on any error
+            total_time = time.time() - start_time
             self.video_writer.release()
-            print(f"ERROR: Video generation failed - {str(e)}")
+            print(f"ERROR: Video generation failed after {total_time:.2f} seconds - {str(e)}")
             raise
