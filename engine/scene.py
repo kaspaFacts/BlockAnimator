@@ -184,17 +184,17 @@ class Scene:
     def center_camera_on_sprite(self, sprite_id):
         """Center camera on a specific sprite."""
         if sprite_id in self.sprite_registry:
-            # Find the sprite's grid position
-            for block_id, block_data in getattr(self, '_block_positions', {}).items():
-                if block_id == sprite_id:
-                    grid_pos = block_data['grid_pos']
-                    self.coords.set_camera_position(grid_pos[0], grid_pos[1])
-                    return
-
-            # If not found in block positions, calculate from pixel position
             sprite = self.sprite_registry[sprite_id]
-            grid_x, grid_y = self.coords.pixel_to_grid(sprite.x, sprite.y)
-            self.coords.set_camera_position(grid_x, grid_y)
+
+            # Calculate field dimensions
+            aspect_ratio = self.width / self.height
+            horizontal_field = 50 * aspect_ratio
+
+            # Center camera on sprite
+            camera_x = sprite.grid_x - (horizontal_field / 2)
+            camera_y = sprite.grid_y - 25
+
+            self.coords.set_camera_position(camera_x, camera_y)
 
     def move_camera(self, delta_x, delta_y):
         """Move camera by grid steps."""
@@ -206,13 +206,22 @@ class Scene:
 
     def animate_camera_to_sprite(self, sprite_id, duration=1.0):
         """Create an animation to move camera to sprite."""
-        if sprite_id in self._block_positions:
-            grid_pos = self._block_positions[sprite_id]['grid_pos']
+        if sprite_id in self.sprite_registry:
+            sprite = self.sprite_registry[sprite_id]
+
+            # Calculate field dimensions
+            aspect_ratio = self.width / self.height
+            horizontal_field = 50 * aspect_ratio  # 50 is your field_height
+
+            # Center camera on sprite by offsetting by half the visible field
+            target_x = sprite.grid_x - (horizontal_field / 2)
+            target_y = sprite.grid_y - (25)  # 25 is half of field_height (50)
+
             return {
                 'type': 'camera_move',
                 'sprite_id': 'camera',
-                'target_x': grid_pos[0],
-                'target_y': grid_pos[1],
+                'target_x': target_x,
+                'target_y': target_y,
                 'duration': duration,
                 'scene': self
             }

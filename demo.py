@@ -7,40 +7,45 @@ class BlockDAGDemo(Scene):
     def construct(self):
         BD = BlockDAG(self)
 
-        # Genesis block (no parents)
-        self.play(BD.add("Gen", (0, 0), label="G"))
+        # Genesis block near bottom-left with margin
+        self.play(BD.add("Gen", (10,25), label="G"))
 
-        # Block with single parent
-        self.play(BD.add("X", (2, 0), label="X", parents=["Gen"]))
+        # Block with single parent - space horizontally
+        self.play(BD.add("X", (25, 25), label="X", parents=["Gen"]))
 
-        # Block with multiple parents, including styled connection
-        self.play(BD.add("Y", (3, 2), label=":)",
+        # Block with multiple parents - position higher and to the right
+        self.play(BD.add("Y", (30, 35), label=":)",
                          parents=["Gen", Parent("X", color=(0, 255, 0))]))
 
-        # Block with single parent
-        self.play(BD.add("Z", (6, 1), label="Z", parents=["Y"]))
+        # Block with single parent - further right and middle height
+        self.play(BD.add("Z", (45, 25), label="Z", parents=["Y"]))
 
-        # Move blocks - connections automatically follow
-        self.play(BD.shift("Y", (1, -3), run_time=2))
+        # Move blocks using absolute positioning instead of shift
+        # Move Y block to a new absolute position
+        new_y_pos = (35, 18)
+        self.play(self.move_sprite_to("Y", new_y_pos, run_time=2))
 
         self.wait(3)
+
 
 class BlockCameraDemo(Scene):
     def construct(self):
         BD = BlockDAG(self)
 
-        self.play(BD.add("Gen", (0, 0), label="G"))
-        self.play(BD.add("X", (5, 0), label="X"))
-        self.play(BD.add("Y", (10, 3), label=":)"))
+        # Place blocks across the field to demonstrate camera movement
+        self.play(BD.add("Gen", (8, 25), label="G"))
+        self.play(BD.add("X", (30, 25), label="X"))
+        self.play(BD.add("Y", (45, 30), label=":)"))
 
-        # Animate camera movements
+        # Animate camera movements to follow the blocks
         self.play(self.animate_camera_to_sprite("X", duration=1.0))
         self.wait(1)
 
         self.play(self.animate_camera_to_sprite("Y", duration=1.0))
         self.wait(1)
 
-        self.play(self.animate_camera_move(2, -1, duration=1.0))
+        # Move camera by relative offset
+        self.play(self.animate_camera_move(15, -13, duration=1.0))
         self.wait(1)
 
 
@@ -116,9 +121,9 @@ class FiftyBlocksDemo(Scene):
         self.wait(2)
 
 if __name__ == "__main__":
-#    scene = BlockCameraDemo()
+    scene = BlockCameraDemo()
 #    scene = BlockDAGDemo()
-    scene = FiftyBlocksDemo()
+#    scene = FiftyBlocksDemo()
     scene.construct()
     scene.render()
 
