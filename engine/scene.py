@@ -194,15 +194,17 @@ class Scene:
 
             # Calculate field dimensions
             aspect_ratio = self.width / self.height
-            horizontal_field = 50 * aspect_ratio  # 50 is your field_height
+            horizontal_field = 50 * aspect_ratio
 
             # Center camera on sprite by offsetting by half the visible field
             target_x = sprite.grid_x - (horizontal_field / 2)
-            target_y = sprite.grid_y - (25)  # 25 is half of field_height (50)
+            target_y = sprite.grid_y - (25)
 
             return {
                 'type': 'camera_move',
                 'sprite_id': 'camera',
+                'start_x': self.coords.camera_x,  # Add current camera position
+                'start_y': self.coords.camera_y,  # Add current camera position
                 'target_x': target_x,
                 'target_y': target_y,
                 'duration': duration,
@@ -215,8 +217,10 @@ class Scene:
         return {
             'type': 'camera_move',
             'sprite_id': 'camera',
-            'delta_x': delta_x,
-            'delta_y': delta_y,
+            'start_x': self.coords.camera_x,  # Add current camera position
+            'start_y': self.coords.camera_y,  # Add current camera position
+            'target_x': self.coords.camera_x + delta_x,  # Calculate target from current + delta
+            'target_y': self.coords.camera_y + delta_y,  # Calculate target from current + delta
             'duration': duration,
             'scene': self
         }

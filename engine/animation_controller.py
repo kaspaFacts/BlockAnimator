@@ -35,8 +35,16 @@ class AnimationController:
 
         # Handle camera animations separately since they don't target sprites
         if anim_type == 'camera_move':
-            start_x = animation['start_x']
-            start_y = animation['start_y']
+            # Capture start position on first frame if not already captured
+            if 'actual_start_x' not in animation:
+                scene = animation.get('scene')
+                if scene:
+                    animation['actual_start_x'] = scene.coords.camera_x
+                    animation['actual_start_y'] = scene.coords.camera_y
+
+                    # Use the captured actual start positions
+            start_x = animation['actual_start_x']
+            start_y = animation['actual_start_y']
             target_x = animation['target_x']
             target_y = animation['target_y']
 
