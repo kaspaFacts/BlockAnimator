@@ -51,7 +51,7 @@ class BlockCameraDemo(Scene):
 
 class FiftyBlocksDemo(Scene):
     def __init__(self):
-        super().__init__(resolution="480p", fps=15)
+        super().__init__(resolution="480p", fps=30)
 
     def construct(self):
         BD = BlockDAG(self)
@@ -84,12 +84,19 @@ class FiftyBlocksDemo(Scene):
             x_pos = start_x + col * spacing_x
             y_pos = start_y + row * spacing_y
 
-            # Display the coordinates where the block will be placed
             print(f"Block {i} will be placed at coordinates: ({x_pos:.2f}, {y_pos:.2f})")
 
             block_id = f"Block_{i}"
             block_ids.append(block_id)
-            self.play(BD.add(block_id, (x_pos, y_pos), label=f"{i}"), duration=0.5)
+
+            # Determine parent for this block (previous block in sequence)
+            parents = []
+            if i > 0:  # All blocks except the first have the previous block as parent
+                parent_id = f"Block_{i - 1}"
+                parents = [parent_id]
+
+                # Add block with parent connection
+            self.play(BD.add(block_id, (x_pos, y_pos), label=f"{i}", parents=parents), duration=0.5)
 
         self.wait(1)  # Pause to show the initial grid
 
@@ -119,7 +126,7 @@ class FiftyBlocksDemo(Scene):
         self.play(*move_animations)
 
         self.wait(2)
-        # Create animations to move all blocks back to original positions
+        # Create animations to move all blocks back to original positions with alpha changes
         return_animations = []
         for i, block_id in enumerate(block_ids):
             # Recalculate original position using same logic as initial placement
@@ -128,18 +135,30 @@ class FiftyBlocksDemo(Scene):
             original_x = start_x + col * spacing_x
             original_y = start_y + row * spacing_y
 
+            # Add movement animation for all blocks
             return_animations.append(
                 self.move_to(block_id, (original_x, original_y), duration=2.0)
             )
 
-            # Play all return animations simultaneously
+            # Add alpha change for first half of blocks (blocks 0-24)
+            if i < 25:
+                return_animations.append(
+                    self.change_appearance(block_id, target_color=(0,0,255), target_alpha=75, duration=3.0)
+                )
+                # Second half keeps original alpha (blocks 25-49)
+            else:
+                return_animations.append(
+                    self.change_appearance(block_id, target_color=(0,255,0), duration=3.0)
+                )
+
+                # Play all return animations simultaneously
         self.play(*return_animations)
         self.wait(2)  # Final pause to show the restored grid
 
 if __name__ == "__main__":
-    scene = BlockCameraDemo()
+#    scene = BlockCameraDemo()
 #    scene = BlockDAGDemo()
-#    scene = FiftyBlocksDemo()
+    scene = FiftyBlocksDemo()
     scene.construct()
     scene.render()
 

@@ -31,7 +31,8 @@ class BlockDAG:
         # Create animations list - start with block fade-in
         animations = [{
             'type': 'fade_in',
-            'sprite_id': block_id
+            'sprite_id': block_id,
+            'duration': 1.0  # or whatever duration you prefer
         }]
 
         # Add parent connections that fade in simultaneously
@@ -79,7 +80,6 @@ class BlockDAG:
             'target_grid_y': new_grid[1]
         }
 
-
     # Add to BlockDAG class
     def connect(self, from_block_id, to_block_id, connection_id=None, **kwargs):
         """Create a connection between two blocks."""
@@ -97,7 +97,6 @@ class BlockDAG:
                 'sprite_id': connection_id
            }
         return None
-
 
     def connect_many(self, from_block_id, to_block_ids, **kwargs):
         """Create connections from one block to many others."""

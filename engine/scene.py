@@ -1,4 +1,3 @@
-# engine/scene.py
 import pygame
 from engine.coordinate_system import CoordinateSystem
 from engine.animation_controller import AnimationController
@@ -14,14 +13,15 @@ class TimelineEvent:
         self.kwargs = kwargs
         self.executed = False
 
+
 class Scene:
     def __init__(self, resolution='720p', fps=30, field_height=50):
 
         resolutions = {
-            '240p': (426, 240),
-            '480p': (854, 480),
-            '720p': (1280, 720),
-            '1080p': (1920, 1080)
+            '240p': (432, 240),  # Changed from (426, 240)
+            '480p': (848, 480),  # Changed from (854, 480)
+            '720p': (1280, 720),  # Already correct
+            '1080p': (1920, 1080)  # Already correct
         }
 
         self.width, self.height = resolutions[resolution]
@@ -38,7 +38,7 @@ class Scene:
         )
 
         # Animation system
-        self.animation_controller = AnimationController()
+        self.animation_controller = AnimationController(fps=self.fps)
 
         # Use LayeredUpdates instead of regular Group for z-ordering
         self.sprites = pygame.sprite.LayeredUpdates()
@@ -46,14 +46,16 @@ class Scene:
 
         # Define layer constants for proper z-ordering
         self.CONNECTION_LAYER = 0  # Behind everything
-        self.BLOCK_LAYER = 1       # On top of connections
+        self.BLOCK_LAYER = 1  # On top of connections
 
-        # Timing
-        self.current_time = 0.0
-        self.scene_duration = 0.0
+        # Frame-based timing only
+        self.current_frame = 0
+        self.timeline_events = []
+        self.scene_duration_frames = 0
 
-        self.timeline_events = []  # Add this new attribute
-        self.scene_duration_frames = 0  # Add this new attribute
+    def duration_to_frames(self, duration_seconds):
+        """Convert duration in seconds to exact frame count."""
+        return round(duration_seconds * self.fps)
 
     def schedule_at_frame(self, frame, event_type, **kwargs):
         """Schedule an event to happen at a specific frame during rendering."""
@@ -62,8 +64,6 @@ class Scene:
         # Update scene duration to include this event
         duration_frames = kwargs.get('duration_frames', 0)
         self.scene_duration_frames = max(self.scene_duration_frames, frame + duration_frames)
-        # Convert to time for compatibility
-        self.scene_duration = self.scene_duration_frames / self.fps
 
     def construct(self):
         """Override this method to define your scene animations."""
@@ -127,8 +127,11 @@ class Scene:
                 sprite.update_line()
 
     def play(self, *animations, duration=1.0):
-        """Convert time-based play to frame-based scheduling."""
-        current_frame = int(self.current_time * self.fps)
+        """Schedule animations at specific frames with debug output."""
+        print(f"\n=== PLAY METHOD DEBUG ===")
+        print(f"Default duration: {duration}s")
+        print(f"Current frame: {self.current_frame}")
+        print(f"FPS: {self.fps}")
 
         # Flatten any nested lists of animations first
         flattened_animations = []
@@ -138,32 +141,67 @@ class Scene:
             elif anim is not None:  # Handle None animations
                 flattened_animations.append(anim)
 
-        for animation in flattened_animations:
-            if animation:  # Double-check it's not None
-                duration_frames = int(duration * self.fps)
-                animation['duration_frames'] = duration_frames
-                self.schedule_at_frame(current_frame, 'start_animation', animation=animation)
+        print(f"Total animations to process: {len(flattened_animations)}")
 
-                # Update current time and frame tracking
-        self.current_time += duration
-        self.scene_duration_frames = max(self.scene_duration_frames, int(self.current_time * self.fps))
-        self.scene_duration = max(self.scene_duration, self.current_time)
+        # Find the maximum duration among all animations
+        max_duration = duration
+        for i, animation in enumerate(flattened_animations):
+            if animation and 'duration' in animation:
+                anim_duration = animation['duration']
+                max_duration = max(max_duration, anim_duration)
+                print(f"Animation {i}: sprite_id={animation.get('sprite_id', 'unknown')}, duration={anim_duration}s")
+            else:
+                print(f"Animation {i}: No duration specified, will use default {duration}s")
+
+        print(f"Maximum duration found: {max_duration}s")
+        max_duration_frames = self.duration_to_frames(max_duration)
+        print(f"Maximum duration in frames: {max_duration_frames}")
+
+        # Process each animation
+        for i, animation in enumerate(flattened_animations):
+            if animation:  # Double-check it's not None
+                # Use the animation's own duration if specified, otherwise use play's duration
+                anim_duration = animation.get('duration', duration)
+                duration_frames = self.duration_to_frames(anim_duration)
+
+                print(f"\nProcessing animation {i}:")
+                print(f"  Sprite ID: {animation.get('sprite_id', 'unknown')}")
+                print(f"  Type: {animation.get('type', 'unknown')}")
+                print(f"  Duration: {anim_duration}s -> {duration_frames} frames")
+                print(f"  Start frame: {self.current_frame}")
+                print(f"  End frame: {self.current_frame + duration_frames}")
+
+                animation['duration_frames'] = duration_frames
+                animation['start_frame'] = self.current_frame
+                self.schedule_at_frame(self.current_frame, 'start_animation', animation=animation)
+
+                # Update frame tracking using the maximum duration
+        frame_advance = self.duration_to_frames(max_duration)
+        old_current_frame = self.current_frame
+        self.current_frame += frame_advance
+        old_scene_duration = self.scene_duration_frames
+        self.scene_duration_frames = max(self.scene_duration_frames, self.current_frame)
+
+        print(f"\n=== FRAME TRACKING UPDATE ===")
+        print(f"Frame advance: {frame_advance}")
+        print(f"Current frame: {old_current_frame} -> {self.current_frame}")
+        print(f"Scene duration frames: {old_scene_duration} -> {self.scene_duration_frames}")
+        print(f"=== END PLAY METHOD DEBUG ===\n")
 
     def wait(self, duration):
         """Add a pause in frames."""
-        self.current_time += duration
-        wait_frames = int(duration * self.fps)
-        self.scene_duration_frames = max(self.scene_duration_frames, int(self.current_time * self.fps))
-        self.scene_duration = max(self.scene_duration, self.current_time)
+        wait_frames = self.duration_to_frames(duration)
+        self.current_frame += wait_frames
+        self.scene_duration_frames = max(self.scene_duration_frames, self.current_frame)
 
     def render(self, filename=None):
         """Render the scene to video."""
         if filename is None:
             filename = f"{self.__class__.__name__}.mp4"
 
-        # Ensure minimum duration
-        if self.scene_duration <= 0:
-            self.scene_duration = 1.0
+            # Ensure minimum duration
+        if self.scene_duration_frames <= 0:
+            self.scene_duration_frames = self.fps  # 1 second minimum
 
         renderer = VideoRenderer(self, filename)
         renderer.generate_video()
@@ -184,8 +222,58 @@ class Scene:
             'start_grid_y': start_y,
             'target_grid_x': target_x,
             'target_grid_y': target_y,
-            'duration': duration
+            'duration': duration  # This will be converted to frames in play()
         }
+
+    def fade_to(self, sprite_id, target_alpha, duration=1.0):
+        """Create opacity animation for a sprite."""
+        if sprite_id not in self.sprite_registry:
+            return None
+
+        sprite = self.sprite_registry[sprite_id]
+        start_alpha = sprite.alpha
+
+        return {
+            'type': 'fade_to',
+            'sprite_id': sprite_id,
+            'start_alpha': start_alpha,
+            'target_alpha': target_alpha,
+            'duration': duration  # This will be converted to frames in play()
+        }
+
+    def change_color(self, sprite_id, target_color, duration=1.0):
+        """Create color change animation for a sprite."""
+        if sprite_id not in self.sprite_registry:
+            return None
+
+        sprite = self.sprite_registry[sprite_id]
+        start_color = sprite.color
+
+        return {
+            'type': 'color_change',
+            'sprite_id': sprite_id,
+            'start_color': start_color,
+            'target_color': target_color,
+            'duration': duration  # This will be converted to frames in play()
+        }
+
+    def change_appearance(self, sprite_id, target_color=None, target_alpha=None, duration=1.0):
+        """Create combined color and alpha animation for a sprite."""
+        if sprite_id not in self.sprite_registry:
+            return None
+
+        return {
+            'type': 'change_appearance',
+            'sprite_id': sprite_id,
+            'target_color': target_color,
+            'target_alpha': target_alpha,
+            'duration': duration  # This will be converted to frames in play()
+        }
+
+        #####################
+
+    # Camera Movement
+    #####################
 
     def animate_camera_to_sprite(self, sprite_id, duration=1.0):
         """Create an animation to move camera to sprite."""
@@ -203,11 +291,11 @@ class Scene:
             return {
                 'type': 'camera_move',
                 'sprite_id': 'camera',
-                'start_x': self.coords.camera_x,  # Add current camera position
-                'start_y': self.coords.camera_y,  # Add current camera position
+                'start_x': self.coords.camera_x,
+                'start_y': self.coords.camera_y,
                 'target_x': target_x,
                 'target_y': target_y,
-                'duration': duration,
+                'duration': duration,  # This will be converted to frames in play()
                 'scene': self
             }
         return None
@@ -217,10 +305,10 @@ class Scene:
         return {
             'type': 'camera_move',
             'sprite_id': 'camera',
-            'start_x': self.coords.camera_x,  # Add current camera position
-            'start_y': self.coords.camera_y,  # Add current camera position
-            'target_x': self.coords.camera_x + delta_x,  # Calculate target from current + delta
-            'target_y': self.coords.camera_y + delta_y,  # Calculate target from current + delta
-            'duration': duration,
+            'start_x': self.coords.camera_x,
+            'start_y': self.coords.camera_y,
+            'target_x': self.coords.camera_x + delta_x,
+            'target_y': self.coords.camera_y + delta_y,
+            'duration': duration,  # This will be converted to frames in play()
             'scene': self
         }

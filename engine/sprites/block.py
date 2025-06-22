@@ -60,9 +60,8 @@ class Block(pygame.sprite.Sprite):
         text_rect = text_surface.get_rect(center=block_rect.center)
         self.image.blit(text_surface, text_rect)
 
-        # Apply alpha
-        if self.alpha < 255:
-            self.image.set_alpha(self.alpha)
+        # Always apply alpha, even when it's 255
+        self.image.set_alpha(self.alpha)
 
     def set_position(self, x, y):
         """Set sprite position."""
