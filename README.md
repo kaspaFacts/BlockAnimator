@@ -14,3 +14,5 @@ stress test - FiftyBlocksDemo (creates 50 blocks, spaced along the coord grid, w
 
 
 NOTE: only the functions in the demo have been tested with the rendering and updated coord system and the updated timing system
+
+NOTE: when viewing animations in a media player(and sliding time), the media player will drop frames, but frames are rendered and exported to mp4
