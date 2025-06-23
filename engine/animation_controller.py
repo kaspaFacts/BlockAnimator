@@ -192,16 +192,28 @@ class AnimationController:
             animation['actual_start_alpha'] = sprite.alpha
             print(f"Fade-in starting: sprite {animation['sprite_id']} alpha={sprite.alpha}")
 
+            # For DirtySprite connections, set visible at animation start
+            if hasattr(sprite, '_visible') and sprite._visible == 0:
+                sprite.set_visible(True)
+                print(f"Setting {animation['sprite_id']} visible for fade-in")
+
         start_alpha = animation['actual_start_alpha']
         target_alpha = 255  # Always fade to full opacity
 
         if is_complete:
             print(f"Fade-in complete: setting {animation['sprite_id']} alpha to {target_alpha}")
             sprite.set_alpha(target_alpha)
+
+            # Ensure visibility is set for non-DirtySprite objects
+            if not hasattr(sprite, '_visible'):
+                sprite.set_visible(True)
         else:
             current_alpha = int(start_alpha + (target_alpha - start_alpha) * progress)
             sprite.set_alpha(current_alpha)
-        sprite.set_visible(True)
+
+            # Ensure visibility is set for non-DirtySprite objects
+            if not hasattr(sprite, '_visible'):
+                sprite.set_visible(True)
 
     def _handle_move_to(self, animation, sprite, is_complete, progress):
         """Handle movement animations."""

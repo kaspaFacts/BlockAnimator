@@ -3,7 +3,10 @@ import pygame
 
 
 class Block(pygame.sprite.Sprite):
-    """A simple block sprite."""
+    """
+    A simple block sprite.
+    The base physical representation of a block.
+    """
 
     def __init__(self, x, y, sprite_id, grid_size, text="Block", color=(255, 0, 0)):
         super().__init__()

@@ -155,7 +155,7 @@ class FiftyBlocksDemo(Scene):
 
 class LayerDAGDemo(Scene):
     def __init__(self):
-        super().__init__(resolution="240p", fps=15)
+        super().__init__(resolution="480p", fps=15)
 
     def construct(self):
         LD = GhostDAG(self, k=3)

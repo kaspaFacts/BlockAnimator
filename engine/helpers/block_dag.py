@@ -48,9 +48,7 @@ class BlockDAG:
                     if isinstance(parent, Parent) and parent.color:
                         connection_kwargs['color'] = parent.color
 
-                    connection = self.scene.add_connection(
-                        connection_id, parent_id, block_id, **connection_kwargs
-                    )
+                    self.scene.add_connection(connection_id, block_id, parent_id, **connection_kwargs)
 
                     # Add connection fade-in animation
                     animations.append({

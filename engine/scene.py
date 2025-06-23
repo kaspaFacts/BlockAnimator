@@ -136,11 +136,11 @@ class Scene:
         self.sprites.add(connection, layer=self.CONNECTION_LAYER)
 
         # Register connection as an alpha observer for both blocks
-        start_block.alpha_observers.append(connection)
-        end_block.alpha_observers.append(connection)
+#        start_block.alpha_observers.append(connection)
+#        end_block.alpha_observers.append(connection)
 
         # Initialize connection alpha to match start block's alpha
-        connection.set_alpha(start_block.alpha)
+#        connection.set_alpha(start_block.alpha)
 
         return connection
 
