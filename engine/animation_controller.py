@@ -1,16 +1,67 @@
 """Unified animation controller."""
 
-class AnimationController:
-    """Handles all animation types uniformly using frame-based timing."""
 
+class AnimationController:
     def __init__(self, fps=None):
         self.animations = []
         self.fps = fps
+        self.next_available_frame = 0
+
+    def play_simultaneous(self, animations, start_frame=None):
+        """Play multiple animations at the same time"""
+        if start_frame is None:
+            start_frame = self.next_available_frame
+
+        if not isinstance(animations, list):
+            animations = [animations]
+
+            # Filter out invalid animations (empty lists, None, etc.)
+        valid_animations = []
+        for animation in animations:
+            if isinstance(animation, dict) and 'type' in animation:
+                valid_animations.append(animation)
+            elif animation:  # Skip empty lists, None, etc.
+                print(f"Warning: Invalid animation object: {animation}")
+
+        if not valid_animations:
+            return self.next_available_frame  # No valid animations to process
+
+        max_duration = 0
+        for animation in valid_animations:
+            animation['start_frame'] = start_frame
+            animation['duration_frames'] = self.duration_to_frames(animation.get('duration', 1.0))
+            max_duration = max(max_duration, animation['duration_frames'])
+            self.add_animation(animation)
+
+            # Update next available frame to after all simultaneous animations complete
+        end_frame = start_frame + max_duration
+        self.next_available_frame = end_frame
+        return end_frame
+
+    def play_sequential(self, animation_groups):
+        """Play animation groups one after another"""
+        current_frame = self.next_available_frame
+
+        for group in animation_groups:
+            # Each group plays simultaneously, but groups are sequential
+            end_frame = self.play_simultaneous(group, current_frame)
+            current_frame = end_frame
+
+        return current_frame
 
     def add_animation(self, animation):
-        """Add an animation to the controller."""
+        """Add a single animation to the controller."""
+        if 'start_frame' not in animation:
+            animation['start_frame'] = self.next_available_frame
+        if 'duration_frames' not in animation:
+            animation['duration_frames'] = self.duration_to_frames(animation.get('duration', 1.0))
+
         self._add_debug_fields(animation)
         self.animations.append(animation)
+
+    def _handle_wait(self, animation, sprite, is_complete, progress):
+        """Handle wait animations - do nothing, just consume time"""
+        pass  # Wait animations don't need to do anything
 
     def _add_debug_fields(self, animation):
         """Initialize debugging fields for an animation."""

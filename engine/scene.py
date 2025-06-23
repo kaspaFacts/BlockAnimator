@@ -14,6 +14,30 @@ class TimelineEvent:
         self.executed = False
 
 
+class AnimationGroup:
+    """Wrapper for simultaneous animations"""
+
+    def __init__(self, animations):
+        self.animations = animations if isinstance(animations, list) else [animations]
+        self.animation_type = 'simultaneous'
+
+
+class SequentialAnimations:
+    """Wrapper for sequential animation groups"""
+
+    def __init__(self, *animation_groups):
+        self.animation_groups = list(animation_groups)
+        self.animation_type = 'sequential'
+
+# Convenience functions
+def simultaneous(*animations):
+    """Create a group of simultaneous animations"""
+    return AnimationGroup(list(animations))
+
+def sequential(*groups):
+    """Create sequential animation groups"""
+    return SequentialAnimations(*groups)
+
 class Scene:
     def __init__(self, resolution='720p', fps=30, field_height=50):
 
@@ -126,73 +150,58 @@ class Scene:
             if isinstance(sprite, Connection):
                 sprite.update_line()
 
-    def play(self, *animations, duration=1.0):
-        """Schedule animations at specific frames with debug output."""
-        print(f"\n=== PLAY METHOD DEBUG ===")
-        print(f"Default duration: {duration}s")
-        print(f"Current frame: {self.current_frame}")
-        print(f"FPS: {self.fps}")
+    def play(self, *args, **kwargs):
+        """Universal play method that handles different animation types automatically"""
+        if not args:
+            return
 
-        # Flatten any nested lists of animations first
-        flattened_animations = []
-        for anim in animations:
-            if isinstance(anim, list):
-                flattened_animations.extend(anim)
-            elif anim is not None:  # Handle None animations
-                flattened_animations.append(anim)
+        # Handle different input types
+        if len(args) == 1:
+            animation_input = args[0]
 
-        print(f"Total animations to process: {len(flattened_animations)}")
-
-        # Find the maximum duration among all animations
-        max_duration = duration
-        for i, animation in enumerate(flattened_animations):
-            if animation and 'duration' in animation:
-                anim_duration = animation['duration']
-                max_duration = max(max_duration, anim_duration)
-                print(f"Animation {i}: sprite_id={animation.get('sprite_id', 'unknown')}, duration={anim_duration}s")
+            # Check if it's a special animation group/sequence object
+            if hasattr(animation_input, 'animation_type'):
+                if animation_input.animation_type == 'simultaneous':
+                    end_frame = self.animation_controller.play_simultaneous(animation_input.animations)
+                elif animation_input.animation_type == 'sequential':
+                    end_frame = self.animation_controller.play_sequential(animation_input.animation_groups)
+                else:
+                    # Single animation
+                    end_frame = self.animation_controller.play_simultaneous([animation_input])
+            elif isinstance(animation_input, list):
+                # List of animations - play simultaneously
+                end_frame = self.animation_controller.play_simultaneous(animation_input)
             else:
-                print(f"Animation {i}: No duration specified, will use default {duration}s")
+                # Single animation
+                end_frame = self.animation_controller.play_simultaneous([animation_input])
+        else:
+            # Multiple arguments - play simultaneously
+            flattened_animations = []
+            for anim in args:
+                if isinstance(anim, list):
+                    flattened_animations.extend(anim)
+                elif anim is not None:
+                    flattened_animations.append(anim)
 
-        print(f"Maximum duration found: {max_duration}s")
-        max_duration_frames = self.duration_to_frames(max_duration)
-        print(f"Maximum duration in frames: {max_duration_frames}")
+            end_frame = self.animation_controller.play_simultaneous(flattened_animations)
 
-        # Process each animation
-        for i, animation in enumerate(flattened_animations):
-            if animation:  # Double-check it's not None
-                # Use the animation's own duration if specified, otherwise use play's duration
-                anim_duration = animation.get('duration', duration)
-                duration_frames = self.duration_to_frames(anim_duration)
-
-                print(f"\nProcessing animation {i}:")
-                print(f"  Sprite ID: {animation.get('sprite_id', 'unknown')}")
-                print(f"  Type: {animation.get('type', 'unknown')}")
-                print(f"  Duration: {anim_duration}s -> {duration_frames} frames")
-                print(f"  Start frame: {self.current_frame}")
-                print(f"  End frame: {self.current_frame + duration_frames}")
-
-                animation['duration_frames'] = duration_frames
-                animation['start_frame'] = self.current_frame
-                self.schedule_at_frame(self.current_frame, 'start_animation', animation=animation)
-
-                # Update frame tracking using the maximum duration
-        frame_advance = self.duration_to_frames(max_duration)
-        old_current_frame = self.current_frame
-        self.current_frame += frame_advance
-        old_scene_duration = self.scene_duration_frames
-        self.scene_duration_frames = max(self.scene_duration_frames, self.current_frame)
-
-        print(f"\n=== FRAME TRACKING UPDATE ===")
-        print(f"Frame advance: {frame_advance}")
-        print(f"Current frame: {old_current_frame} -> {self.current_frame}")
-        print(f"Scene duration frames: {old_scene_duration} -> {self.scene_duration_frames}")
-        print(f"=== END PLAY METHOD DEBUG ===\n")
+            # Update scene timing
+        self.current_frame = end_frame
+        self.scene_duration_frames = max(self.scene_duration_frames, end_frame)
 
     def wait(self, duration):
-        """Add a pause in frames."""
-        wait_frames = self.duration_to_frames(duration)
-        self.current_frame += wait_frames
-        self.scene_duration_frames = max(self.scene_duration_frames, self.current_frame)
+        """Add a wait/pause to the animation timeline"""
+        # Create a dummy animation that does nothing but takes time
+        wait_animation = {
+            'type': 'wait',
+            'sprite_id': 'wait',
+            'duration': duration
+        }
+
+        # Use the animation controller's timing system
+        end_frame = self.animation_controller.play_simultaneous([wait_animation])
+        self.current_frame = end_frame
+        self.scene_duration_frames = max(self.scene_duration_frames, end_frame)
 
     def render(self, filename=None):
         """Render the scene to video."""
@@ -254,7 +263,7 @@ class Scene:
             'sprite_id': sprite_id,
             'start_color': start_color,
             'target_color': target_color,
-            'duration': duration  # This will be converted to frames in play()
+            'duration': duration
         }
 
     def change_appearance(self, sprite_id, target_color=None, target_alpha=None, duration=1.0):

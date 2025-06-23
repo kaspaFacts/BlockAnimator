@@ -1,4 +1,5 @@
 """BlockDAG helper with grid coordinates."""
+import random
 
 
 class BlockDAG:
@@ -116,5 +117,292 @@ class Parent:
         self.color = color
         self.width = width
         self.kwargs = kwargs
+
+
+class LayerDAG(BlockDAG):
+    def __init__(self, scene, layer_spacing=15, chain_spacing=8, width=4):
+        super().__init__(scene)
+        self.layers = []
+        self.layer_spacing = layer_spacing
+        self.chain_spacing = chain_spacing
+        self.genesis_pos = (10, 25)
+        self.width = width
+
+    def add_with_layers(self, block_id, parent_names=None, **kwargs):
+        """Add block with automatic sequential animation using timing functions"""
+        if parent_names is None:
+            parent_names = []
+
+            # Normalize parent names
+        if isinstance(parent_names, str):
+            parent_names = [parent_names]
+
+            # Find appropriate layer and position
+        if not parent_names:  # Genesis block
+            layer = 0
+            pos = self.genesis_pos
+            if not self.layers:
+                self.layers.append([])
+        else:
+            top_parent_layer = self._find_top_parent_layer(parent_names)
+            layer = self._find_available_layer(top_parent_layer)
+            pos = self._calculate_layer_position(layer)
+
+            # Add to layer tracking BEFORE calling parent add
+        if layer >= len(self.layers):
+            self.layers.append([])
+        self.layers[layer].append(block_id)
+
+        # Convert parent names to Parent objects
+        parents = [Parent(p) if isinstance(p, str) else p for p in parent_names]
+
+        # Get fade-in animations
+        fade_animations = super().add(block_id, pos, parents=parents, **kwargs)
+
+        # Get adjustment animations
+        adjustment_animations = self._auto_adjust_affected_layers(layer)
+
+        # Use sequential timing: fade first, then adjust
+        animation_groups = [fade_animations]
+        if adjustment_animations:
+            animation_groups.append(adjustment_animations)
+
+            # Schedule sequential animations using the enhanced controller
+        end_frame = self.scene.animation_controller.play_sequential(animation_groups)
+
+        # Update scene timing to account for the full sequence
+        self.scene.current_frame = end_frame
+        self.scene.scene_duration_frames = max(self.scene.scene_duration_frames, end_frame)
+
+        return []  # Return empty since animations are already scheduled
+
+    def _find_top_parent_layer(self, parent_names):
+        """Find the topmost layer containing any parent block"""
+        top_layer = 0
+        for i, layer_blocks in enumerate(self.layers):
+            if any(parent in layer_blocks for parent in parent_names):
+                top_layer = i
+        return top_layer
+
+    def _find_available_layer(self, top_parent_layer):
+        """Find next available layer for block placement"""
+        # Check existing layers for space
+        for i in range(top_parent_layer + 1, len(self.layers)):
+            if len(self.layers[i]) < self.width:
+                return i
+                # All layers full, create new one
+        return len(self.layers)
+
+    def _calculate_layer_position(self, layer):
+        """Calculate position for a block in the given layer"""
+        x_pos = self.genesis_pos[0] + (layer * self.layer_spacing)
+
+        # Stack blocks vertically within the layer
+        if layer < len(self.layers) and self.layers[layer]:
+            last_block = self.layers[layer][-1]
+            last_y = self.blocks[last_block]['grid_pos'][1]
+            y_pos = last_y + self.chain_spacing
+        else:
+            y_pos = self.genesis_pos[1]
+
+        return (x_pos, y_pos)
+
+    def get_tips(self):
+        """Get current tip blocks (blocks with no children)"""
+        tips = []
+        for block_id in self.blocks:
+            has_children = False
+            for other_id, other_data in self.blocks.items():
+                if other_id != block_id:
+                    other_parents = other_data['parents']
+                    parent_ids = [p.parent_id if isinstance(p, Parent) else p for p in other_parents]
+                    if block_id in parent_ids:
+                        has_children = True
+                        break
+            if not has_children:
+                tips.append(block_id)
+        return tips
+
+    def _auto_adjust_affected_layers(self, affected_layer):
+        """Automatically adjust positions when blocks are added"""
+        animations = []
+
+        # If this layer now has multiple blocks, we might need to center them
+        if len(self.layers[affected_layer]) > 1:
+            animations.extend(self._adjust_single_layer(affected_layer))
+
+        return animations
+
+    def _adjust_single_layer(self, layer_index):
+        """Adjust positioning for a single layer"""
+        if layer_index >= len(self.layers):
+            return []
+
+        layer_blocks = self.layers[layer_index]
+        if len(layer_blocks) <= 1:
+            return []
+
+        animations = []
+
+        # Calculate the base Y position for this layer
+        base_y = self.genesis_pos[1]
+        if layer_index > 0:
+            # Position relative to previous layer
+            prev_layer_blocks = self.layers[layer_index - 1]
+            if prev_layer_blocks:
+                # Find the middle Y of the previous layer
+                prev_ys = [self.blocks[bid]['grid_pos'][1] for bid in prev_layer_blocks]
+                base_y = sum(prev_ys) / len(prev_ys)
+
+                # Calculate X position for this layer
+        x_pos = self.genesis_pos[0] + (layer_index * self.layer_spacing)
+
+        # Distribute blocks evenly around the base Y position
+        total_height = (len(layer_blocks) - 1) * self.chain_spacing
+        start_y = base_y - (total_height / 2)
+
+        for i, block_id in enumerate(layer_blocks):
+            new_y = start_y + (i * self.chain_spacing)
+            new_pos = (x_pos, new_y)
+            current_pos = self.blocks[block_id]['grid_pos']
+
+            if new_pos != current_pos:
+                # Update our internal tracking
+                self.blocks[block_id]['grid_pos'] = new_pos
+                # Create animation to move the block
+                animations.append(self.scene.move_to(block_id, new_pos, duration=0.5))
+
+        return animations
+
+    def adjust_layers(self):
+        """Create animations to center blocks within their layers"""
+        animations = []
+        for layer_index in range(len(self.layers)):
+            animations.extend(self._adjust_single_layer(layer_index))
+
+            # Use simultaneous timing for manual layer adjustments
+        if animations:
+            end_frame = self.scene.animation_controller.play_simultaneous(animations)
+            self.scene.current_frame = end_frame
+            self.scene.scene_duration_frames = max(self.scene.scene_duration_frames, end_frame)
+
+        return []  # Return empty since animations are already scheduled
+
+class GhostDAG(LayerDAG):
+    def __init__(self, scene, k=3, **kwargs):
+        super().__init__(scene, **kwargs)
+        self.k = k
+        self.blue_blocks = set()
+        self.red_blocks = set()
+        self.block_scores = {}
+        self.block_work = {}
+
+    def add_with_ghostdag(self, block_id, parent_names=None, **kwargs):
+        """Add block with both layer positioning and GHOSTDAG logic"""
+        parent_names = parent_names or []
+
+        # Assign random work for demo
+        self.block_work[block_id] = random.randint(100, 1000)
+
+        # Convert to Parent objects for GHOSTDAG processing
+        if isinstance(parent_names, str):
+            parent_names = [parent_names]
+        parents = [Parent(p) if isinstance(p, str) else p for p in parent_names]
+
+        # Run GHOSTDAG algorithm
+        is_blue = self._check_blue_candidate(block_id, parents)
+
+        # Update block sets
+        if is_blue:
+            self.blue_blocks.add(block_id)
+            color = (50, 150, 255)  # Blue for honest blocks
+        else:
+            self.red_blocks.add(block_id)
+            color = (255, 100, 50)  # Red for potentially dishonest blocks
+
+        # Calculate blue score
+        blue_score = self._calculate_blue_score(block_id, parents)
+        self.block_scores[block_id] = blue_score
+
+        # Set visual properties
+        kwargs['color'] = color
+        label = kwargs.get('label', block_id)
+        kwargs['label'] = f"{label}({blue_score})"
+
+        # Highlight selected parent connection
+        if parents:
+            selected_parent = self._find_selected_parent(parents)
+            for i, parent in enumerate(parents):
+                parent_id = parent.parent_id if isinstance(parent, Parent) else parent
+                if parent_id == selected_parent:
+                    if isinstance(parent, Parent):
+                        parent.color = (255, 215, 0)  # Gold
+                        parent.width = 4
+                    else:
+                        parents[i] = Parent(parent_id, color=(255, 215, 0), width=4)
+
+        # Call LayerDAG.add_with_layers method (which now auto-adjusts)
+        return super().add_with_layers(block_id, parent_names, **kwargs)
+        # Include all your GHOSTDAG helper methods here
+
+    def _check_blue_candidate(self, block_id, parents):
+        # Your existing implementation
+        current_blues = len([p for p in parents if (p.parent_id if isinstance(p, Parent) else p) in self.blue_blocks])
+        if current_blues >= self.k + 1:
+            return False
+
+        selected_parent = self._find_selected_parent(parents)
+        if not selected_parent:
+            return True
+
+        anticone_size = self._calculate_anticone_size(block_id, parents)
+        return anticone_size <= self.k
+
+    def _find_selected_parent(self, parents):
+        # Your existing implementation
+        if not parents:
+            return None
+        parent_ids = [p.parent_id if isinstance(p, Parent) else p for p in parents]
+        return max(parent_ids, key=lambda p: self.block_work.get(p, 0))
+
+    def _calculate_blue_score(self, block_id, parents):
+        # Your existing implementation
+        if not parents:
+            return 0
+        selected_parent = self._find_selected_parent(parents)
+        if not selected_parent:
+            return 0
+        parent_score = self.block_scores.get(selected_parent, 0)
+        blue_parent_count = len(
+            [p for p in parents if (p.parent_id if isinstance(p, Parent) else p) in self.blue_blocks])
+        return parent_score + blue_parent_count
+
+    def _calculate_anticone_size(self, block_id, parents):
+        # Your existing implementation
+        anticone_count = 0
+        parent_ids = [p.parent_id if isinstance(p, Parent) else p for p in parents]
+
+        for existing_block in self.blue_blocks:
+            if existing_block not in parent_ids and not self._is_ancestor(existing_block, parent_ids):
+                anticone_count += 1
+
+        return anticone_count
+
+    def _is_ancestor(self, block_id, potential_descendants):
+        # Your existing implementation
+        for desc in potential_descendants:
+            if desc in self.blocks:
+                desc_parents = self.blocks[desc]['parents']
+                parent_ids = [p.parent_id if isinstance(p, Parent) else p for p in desc_parents]
+                if block_id in parent_ids:
+                    return True
+        return False
+
+    def rebalance_all_layers(self):
+        """Manually trigger a full rebalancing of all layers"""
+        animations = []
+        for layer_index in range(len(self.layers)):
+            animations.extend(self._adjust_single_layer(layer_index))
+        return animations
 
 WHITE = (255, 255, 255)

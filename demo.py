@@ -1,6 +1,6 @@
 # demo.py
 from engine.scene import Scene
-from engine.helpers.block_dag import BlockDAG, Parent
+from engine.helpers.block_dag import BlockDAG, GhostDAG, Parent
 
 
 class BlockDAGDemo(Scene):
@@ -27,7 +27,6 @@ class BlockDAGDemo(Scene):
 
         self.wait(3)
 
-
 class BlockCameraDemo(Scene):
     def construct(self):
         BD = BlockDAG(self)
@@ -48,10 +47,9 @@ class BlockCameraDemo(Scene):
         self.play(self.animate_camera_move(15, -13, duration=1.0))
         self.wait(1)
 
-
 class FiftyBlocksDemo(Scene):
     def __init__(self):
-        super().__init__(resolution="480p", fps=30)
+        super().__init__(resolution="240p", fps=15)
 
     def construct(self):
         BD = BlockDAG(self)
@@ -119,7 +117,7 @@ class FiftyBlocksDemo(Scene):
 
             # Use Scene's move_to method instead of BD.shift()
             move_animations.append(
-                self.move_to(block_id, (new_x, new_y))
+                self.move_to(block_id, (new_x, new_y), duration=3.0)
             )
 
             # Play all move animations simultaneously
@@ -137,7 +135,7 @@ class FiftyBlocksDemo(Scene):
 
             # Add movement animation for all blocks
             return_animations.append(
-                self.move_to(block_id, (original_x, original_y), duration=2.0)
+                self.move_to(block_id, (original_x, original_y), duration=3.0)
             )
 
             # Add alpha change for first half of blocks (blocks 0-24)
@@ -155,10 +153,137 @@ class FiftyBlocksDemo(Scene):
         self.play(*return_animations)
         self.wait(2)  # Final pause to show the restored grid
 
+class LayerDAGDemo(Scene):
+    def __init__(self):
+        super().__init__(resolution="240p", fps=15)
+
+    def construct(self):
+        LD = GhostDAG(self, k=3)
+
+        # Single animation
+        self.play(LD.add_with_ghostdag("Gen", label="G"))
+
+        # Simultaneous animations (list)
+        u_animations = [LD.add_with_ghostdag(f"U{i}", ["Gen"], label=str(i)) for i in range(3)]
+        self.play(u_animations)
+
+        # Sequential animations (list of lists)
+        tips = LD.get_tips() # get tips to add as parents
+        w_animations = [LD.add_with_ghostdag(f"W{i}", tips, label=f"W{i}") for i in range(5)]
+        adjust_animations = LD.adjust_layers()
+
+        self.play([w_animations, adjust_animations])  # Sequential: fade all W, then adjust
+
+        color_changes = [self.change_color(tip, (0, 255, 0)) for tip in tips]
+        self.play(color_changes)
+
+        tips = LD.get_tips() # get current DAG tips to color red
+        color_changes = [self.change_color(tip, (255, 0, 0)) for tip in tips]
+        self.play(color_changes)
+
+        self.wait(2.0)
+
+class GhostDAGDemo(Scene):
+    def __init__(self):
+        super().__init__(resolution="240p", fps=15)
+
+    def construct(self):
+        GD = GhostDAG(self, k=3)  # Use k=3 for better visualization
+
+        # Genesis block
+        self.play(GD.add("Genesis", (10, 25), label="G"))
+        self.wait(1)
+
+        # Linear chain first
+        self.play(GD.add("A", (25, 25), parents=["Genesis"], label="A"))
+        self.wait(1)
+
+        self.play(GD.add("B", (40, 25), parents=["A"], label="B"))
+        self.wait(1)
+
+        # Create a fork - two blocks with same parent
+        self.play(GD.add("C", (55, 35), parents=["B"], label="C"))
+        self.wait(1)
+
+        self.play(GD.add("D", (55, 15), parents=["B"], label="D"))
+        self.wait(1)
+
+        # Merge the fork - this will test GHOSTDAG algorithm
+        self.play(GD.add("E", (70, 25),
+                                       parents=["C", Parent("D", color=(0, 255, 0))],
+                                       label="E"))
+        self.wait(1)
+
+        # Add more blocks to see k-cluster constraints
+        self.play(GD.add("F", (85, 35), parents=["E"], label="F"))
+        self.wait(1)
+
+        # Create another parallel block to test k limits
+        self.play(GD.add("G", (70, 40), parents=["C"], label="G"))
+        self.wait(1)
+
+        # This should trigger red classification due to k-cluster violation
+        self.play(GD.add("H", (85, 15),
+                                       parents=["D", "G", "F"],
+                                       label="H"))
+        self.wait(2)
+
+        # Show final state
+        print("\nFinal GHOSTDAG State:")
+        print(f"Blue blocks: {GD.blue_blocks}")
+        print(f"Red blocks: {GD.red_blocks}")
+        print(f"Block scores: {GD.block_scores}")
+
+class ComplexGhostDAGDemo(Scene):
+    """More complex demo showing k-cluster constraints"""
+
+    def construct(self):
+        GD = GhostDAG(self, k=2)  # Stricter k for more red blocks
+
+        # Create a more complex DAG structure
+        positions = {
+            "G": (10, 25),
+            "A": (25, 25), "B": (25, 35), "C": (25, 15),
+            "D": (40, 30), "E": (40, 20),
+            "F": (55, 35), "H": (55, 15),
+            "I": (70, 25)
+        }
+
+        # Build DAG step by step
+        self.play(GD.add("G", positions["G"], label="G"))
+        self.wait(0.5)
+
+        # Three children of genesis
+        self.play(GD.add("A", positions["A"], parents=["G"], label="A"))
+        self.wait(0.5)
+        self.play(GD.add("B", positions["B"], parents=["G"], label="B"))
+        self.wait(0.5)
+        self.play(GD.add("C", positions["C"], parents=["G"], label="C"))
+        self.wait(0.5)
+
+        # Merge some of them
+        self.play(GD.add("D", positions["D"], parents=["A", "B"], label="D"))
+        self.wait(0.5)
+        self.play(GD.add("E", positions["E"], parents=["A", "C"], label="E"))
+        self.wait(0.5)
+
+        # More complex merges that should trigger red classification
+        self.play(GD.add("F", positions["F"], parents=["B", "D"], label="F"))
+        self.wait(0.5)
+        self.play(GD.add("H", positions["H"], parents=["C", "E"], label="H"))
+        self.wait(0.5)
+
+        # Final merge - this should definitely be red due to k=2 constraint
+        self.play(GD.add("I", positions["I"], parents=["D", "E", "F", "H"], label="I"))
+        self.wait(3)
+
 if __name__ == "__main__":
 #    scene = BlockCameraDemo()
 #    scene = BlockDAGDemo()
-    scene = FiftyBlocksDemo()
+#    scene = FiftyBlocksDemo()
+#    scene = GhostDAGDemo()
+    scene = LayerDAGDemo()
+#    scene = ComplexGhostDAGDemo()
     scene.construct()
     scene.render()
 

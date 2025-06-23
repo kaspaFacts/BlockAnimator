@@ -1,4 +1,4 @@
-from BlockAnimator import *
+from engine.sprites.block import Block
 
 # In your GhostDAGBlock class
 class GhostDAGBlock(Block):
@@ -85,7 +85,6 @@ class GhostDAGBlock(Block):
             # Update the label
             self.sprite.set_text(str(self.blue_count))
 
-
 class BlockDAG:
     # ... (existing __init__ and other methods) ...
 
@@ -143,3 +142,26 @@ class BlockDAG:
                     })
 
         return animations
+
+class GhostDAG(BlockDAG):
+    def __init__(self, scene, k=18):
+        super().__init__(scene)
+        self.k = k  # GHOSTDAG security parameter
+        self.blue_blocks = set()
+        self.red_blocks = set()
+        self.block_scores = {}  # blue_score for each block
+
+    def add_with_ghostdag(self, block_id, grid_pos, parents=None, **kwargs):
+        """Add block with GHOSTDAG coloring logic"""
+        # Run GHOSTDAG algorithm to determine blue/red classification
+        is_blue = self._check_blue_candidate(block_id, parents or [])
+
+        # Set color based on classification
+        color = (0, 100, 255) if is_blue else (255, 100, 0)  # Blue or red
+        kwargs['color'] = color
+
+        # Calculate and display blue score
+        blue_score = self._calculate_blue_score(block_id, parents or [])
+        kwargs['label'] = f"{kwargs.get('label', block_id)}\n({blue_score})"
+
+        return super().add(block_id, grid_pos, parents=parents, **kwargs)
