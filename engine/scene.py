@@ -2,9 +2,13 @@ import pygame
 from engine.coordinate_system import CoordinateSystem
 from engine.animation_controller import AnimationController
 from engine.renderer import VideoRenderer
-from engine.sprites.block import Block
+from engine.sprites.block import Block, GhostdagBlock
 from engine.sprites.line import Connection
 
+from engine.animations import (
+    MoveToAnimation, FadeToAnimation, ColorChangeAnimation,
+    ChangeAppearanceAnimation, CameraMoveAnimation, WaitAnimation
+)
 
 class TimelineEvent:
     def __init__(self, trigger_frame, event_type, **kwargs):
@@ -94,63 +98,84 @@ class Scene:
         """Override this method to define your scene animations."""
         raise NotImplementedError("Subclasses must implement construct()")
 
-    def add_sprite(self, sprite_id, grid_x, grid_y, **kwargs):
-        """Add a sprite at grid coordinates."""
+    def add_sprite(self, sprite_id, grid_x, grid_y, consensus_type="basic", **kwargs):
+        """Add a sprite at grid coordinates with specified consensus type."""
         pixel_x, pixel_y = self.coords.grid_to_pixel(grid_x, grid_y)
-
         text = kwargs.pop('text', sprite_id)
 
-        sprite = Block(
-            pixel_x, pixel_y,
-            sprite_id=sprite_id,
-            grid_size=self.coords.grid_size,  # Automatically pass grid_size
-            text=text,
-            **kwargs
-        )
+        if consensus_type == "ghostdag":
+            # Ensure scene_registry is properly passed
+            scene_registry = kwargs.pop('scene_registry', self.sprite_registry)
+            sprite = GhostdagBlock(
+                pixel_x, pixel_y,
+                sprite_id=sprite_id,
+                grid_size=self.coords.grid_size,
+                text=text,
+                scene_registry=scene_registry,  # Use the passed registry
+                **kwargs
+            )
+        else:
+            sprite = Block(
+                pixel_x, pixel_y,
+                sprite_id=sprite_id,
+                grid_size=self.coords.grid_size,
+                text=text,
+                **kwargs
+            )
 
-        # Store grid coordinates in the sprite
+            # Store grid coordinates in the sprite
         sprite.grid_x = grid_x
         sprite.grid_y = grid_y
 
         self.sprite_registry[sprite_id] = sprite
-        # Add sprite to BLOCK_LAYER so it appears on top of connections
         self.sprites.add(sprite, layer=self.BLOCK_LAYER)
         return sprite
 
     def add_connection(self, connection_id, start_block_id, end_block_id, **kwargs):
-        """Add a connection line between two blocks."""
-
-        print(f"Scene.add_connection called with kwargs: {kwargs}")
-        if 'color' in kwargs:
-            print(f"Scene creating connection {connection_id} with color: {kwargs['color']}")
-
+        """Enhanced connection creation with GHOSTDAG awareness."""
         start_block = self.sprite_registry.get(start_block_id)
         end_block = self.sprite_registry.get(end_block_id)
 
         if not start_block or not end_block:
             return None
 
-            # Extract selected_parent flag from kwargs
-        selected_parent = kwargs.get('selected_parent', False)
+            # Auto-determine connection properties for GHOSTDAG blocks
+        if isinstance(end_block, GhostdagBlock):
+            is_selected_parent = (start_block.sprite_id == end_block.ghostdag_data.selected_parent)
+            is_blue_connection = start_block.sprite_id in end_block.ghostdag_data.mergeset_blues
 
+            # Auto-determine color based on GHOSTDAG classification
+            if 'color' not in kwargs:
+                if is_selected_parent:
+                    kwargs['color'] = (0, 255, 0)  # Green for selected parent
+                elif is_blue_connection:
+                    kwargs['color'] = (0, 0, 255)  # Blue for blue blocks
+                else:
+                    kwargs['color'] = (255, 0, 0)  # Red for red blocks
+
+            kwargs['selected_parent'] = is_selected_parent
+
+            # Create connection with existing logic
         connection = Connection(
             start_block, end_block,
             sprite_id=connection_id,
             grid_size=self.coords.grid_size,
-            color=kwargs.get('color', (255, 255, 255)),
-            width_percent=kwargs.get('width_percent', 0.3),
-            selected_parent=selected_parent  # Pass the selected_parent flag
+            **kwargs
         )
 
+        # ADD THESE MISSING LINES:
         self.sprite_registry[connection_id] = connection
 
-        if selected_parent:
+        if kwargs.get('selected_parent', False):
             layer = self.SELECTED_CONNECTION_LAYER  # Layer 1
         else:
             layer = self.CONNECTION_LAYER  # Layer 0
 
         self.sprites.add(connection, layer=layer)
 
+        return connection
+
+        # Rest of existing connection logic...
         return connection
 
     def update_connections(self):
@@ -164,35 +189,53 @@ class Scene:
         if not args:
             return
 
-        # Handle different input types
+        def flatten_animations(animations):
+            """Recursively flatten nested lists of animations"""
+            flattened = []
+            for item in animations:
+                if isinstance(item, list):
+                    flattened.extend(flatten_animations(item))
+                elif item is not None:
+                    flattened.append(item)
+            return flattened
+
+            # Handle different input types
+
         if len(args) == 1:
             animation_input = args[0]
 
             # Check if it's a special animation group/sequence object
             if hasattr(animation_input, 'animation_type'):
                 if animation_input.animation_type == 'simultaneous':
-                    end_frame = self.animation_controller.play_simultaneous(animation_input.animations)
+                    # Flatten the animations in the group
+                    flattened_animations = flatten_animations(animation_input.animations)
+                    end_frame = self.animation_controller.play_simultaneous(flattened_animations)
                 elif animation_input.animation_type == 'sequential':
-                    end_frame = self.animation_controller.play_sequential(animation_input.animation_groups)
+                    # Flatten each group in the sequence
+                    flattened_groups = []
+                    for group in animation_input.animation_groups:
+                        flattened_groups.append(flatten_animations(group))
+                    end_frame = self.animation_controller.play_sequential(flattened_groups)
                 else:
                     # Single animation
                     end_frame = self.animation_controller.play_simultaneous([animation_input])
             elif isinstance(animation_input, list):
-                # List of animations - play simultaneously
-                end_frame = self.animation_controller.play_simultaneous(animation_input)
+                # List of animations - flatten and play simultaneously
+                flattened_animations = flatten_animations(animation_input)
+                end_frame = self.animation_controller.play_simultaneous(flattened_animations)
             else:
                 # Single animation
                 end_frame = self.animation_controller.play_simultaneous([animation_input])
         else:
-            # Multiple arguments - play simultaneously
-            flattened_animations = []
+            # Multiple arguments - flatten all and play simultaneously
+            all_animations = []
             for anim in args:
                 if isinstance(anim, list):
-                    flattened_animations.extend(anim)
+                    all_animations.extend(flatten_animations(anim))
                 elif anim is not None:
-                    flattened_animations.append(anim)
+                    all_animations.append(anim)
 
-            end_frame = self.animation_controller.play_simultaneous(flattened_animations)
+            end_frame = self.animation_controller.play_simultaneous(all_animations)
 
             # Update scene timing
         self.current_frame = end_frame
@@ -200,12 +243,10 @@ class Scene:
 
     def wait(self, duration):
         """Add a wait/pause to the animation timeline"""
-        # Create a dummy animation that does nothing but takes time
-        wait_animation = {
-            'type': 'wait',
-            'sprite_id': 'wait',
-            'duration': duration
-        }
+        wait_animation = WaitAnimation(
+            sprite_id='wait',
+            duration=duration
+        )
 
         # Use the animation controller's timing system
         end_frame = self.animation_controller.play_simultaneous([wait_animation])
@@ -230,66 +271,50 @@ class Scene:
             return None
 
         sprite = self.sprite_registry[sprite_id]
-        start_x, start_y = sprite.grid_x, sprite.grid_y
         target_x, target_y = target_pos
 
-        return {
-            'type': 'move_to',
-            'sprite_id': sprite_id,
-            'start_grid_x': start_x,
-            'start_grid_y': start_y,
-            'target_grid_x': target_x,
-            'target_grid_y': target_y,
-            'duration': duration  # This will be converted to frames in play()
-        }
+        return MoveToAnimation(
+            sprite_id=sprite_id,
+            target_grid_x=target_x,
+            target_grid_y=target_y,
+            duration=duration
+        )
 
     def fade_to(self, sprite_id, target_alpha, duration=1.0):
         """Create opacity animation for a sprite."""
         if sprite_id not in self.sprite_registry:
             return None
 
-        sprite = self.sprite_registry[sprite_id]
-        start_alpha = sprite.alpha
-
-        return {
-            'type': 'fade_to',
-            'sprite_id': sprite_id,
-            'start_alpha': start_alpha,
-            'target_alpha': target_alpha,
-            'duration': duration  # This will be converted to frames in play()
-        }
+        return FadeToAnimation(
+            sprite_id=sprite_id,
+            target_alpha=target_alpha,
+            duration=duration
+        )
 
     def change_color(self, sprite_id, target_color, duration=1.0):
         """Create color change animation for a sprite."""
         if sprite_id not in self.sprite_registry:
             return None
 
-        sprite = self.sprite_registry[sprite_id]
-        start_color = sprite.color
-
-        return {
-            'type': 'color_change',
-            'sprite_id': sprite_id,
-            'start_color': start_color,
-            'target_color': target_color,
-            'duration': duration
-        }
+        return ColorChangeAnimation(
+            sprite_id=sprite_id,
+            target_color=target_color,
+            duration=duration
+        )
 
     def change_appearance(self, sprite_id, target_color=None, target_alpha=None, duration=1.0):
         """Create combined color and alpha animation for a sprite."""
         if sprite_id not in self.sprite_registry:
             return None
 
-        return {
-            'type': 'change_appearance',
-            'sprite_id': sprite_id,
-            'target_color': target_color,
-            'target_alpha': target_alpha,
-            'duration': duration  # This will be converted to frames in play()
-        }
+        return ChangeAppearanceAnimation(
+            sprite_id=sprite_id,
+            target_color=target_color,
+            target_alpha=target_alpha,
+            duration=duration
+        )
 
-        #####################
-
+    #####################
     # Camera Movement
     #####################
 
@@ -306,27 +331,21 @@ class Scene:
             target_x = sprite.grid_x - (horizontal_field / 2)
             target_y = sprite.grid_y - (25)
 
-            return {
-                'type': 'camera_move',
-                'sprite_id': 'camera',
-                'start_x': self.coords.camera_x,
-                'start_y': self.coords.camera_y,
-                'target_x': target_x,
-                'target_y': target_y,
-                'duration': duration,  # This will be converted to frames in play()
-                'scene': self
-            }
+            return CameraMoveAnimation(
+                sprite_id='camera',
+                target_x=target_x,
+                target_y=target_y,
+                duration=duration,
+                scene=self
+            )
         return None
 
     def animate_camera_move(self, delta_x, delta_y, duration=1.0):
         """Create an animation to move camera by offset."""
-        return {
-            'type': 'camera_move',
-            'sprite_id': 'camera',
-            'start_x': self.coords.camera_x,
-            'start_y': self.coords.camera_y,
-            'target_x': self.coords.camera_x + delta_x,
-            'target_y': self.coords.camera_y + delta_y,
-            'duration': duration,  # This will be converted to frames in play()
-            'scene': self
-        }
+        return CameraMoveAnimation(
+            sprite_id='camera',
+            target_x=self.coords.camera_x + delta_x,
+            target_y=self.coords.camera_y + delta_y,
+            duration=duration,
+            scene=self
+        )
