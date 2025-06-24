@@ -1,4 +1,6 @@
 # demo.py
+from random import randint
+from numpy.random import poisson as poi
 from engine.scene import Scene
 from engine.helpers.block_dag import BlockDAG, GhostDAG, Parent
 
@@ -185,10 +187,10 @@ class LayerDAGDemo(Scene):
 
 class GhostDAGDemo(Scene):
     def __init__(self):
-        super().__init__(resolution="240p", fps=15)
+        super().__init__(resolution="480p", fps=15)
 
     def construct(self):
-        GD = GhostDAG(self, k=3)  # Use k=3 for better visualization
+        GD = GhostDAG(self, k=1)  # Use k=3 for better visualization
 
         # Genesis block
         self.play(GD.add("Genesis", (10, 25), label="G"))
@@ -234,47 +236,156 @@ class GhostDAGDemo(Scene):
         print(f"Red blocks: {GD.red_blocks}")
         print(f"Block scores: {GD.block_scores}")
 
-class ComplexGhostDAGDemo(Scene):
-    """More complex demo showing k-cluster constraints"""
+
+class AutoLayerDAGDemo(Scene):
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
 
     def construct(self):
-        GD = GhostDAG(self, k=2)  # Stricter k for more red blocks
+        # Configuration similar to GHOSTDAGScene
+        AVG_AC = 4  # Average anticone size
+        BLOCKS = 20  # Total blocks to generate
+        MAX_BLOCKS_PER_BATCH = 3  # Max blocks per batch
+        GD_K = 2  # k parameter for GhostDAG
 
-        # Create a more complex DAG structure
-        positions = {
-            "G": (10, 25),
-            "A": (25, 25), "B": (25, 35), "C": (25, 15),
-            "D": (40, 30), "E": (40, 20),
-            "F": (55, 35), "H": (55, 15),
-            "I": (70, 25)
-        }
+        # Initialize GhostDAG with automatic layering
+        GD = GhostDAG(self, k=GD_K)
 
-        # Build DAG step by step
-        self.play(GD.add("G", positions["G"], label="G"))
+        # Genesis block (automatic positioning)
+        self.play(GD.add_with_ghostdag("Gen", label="G"))
         self.wait(0.5)
 
-        # Three children of genesis
-        self.play(GD.add("A", positions["A"], parents=["G"], label="A"))
-        self.wait(0.5)
-        self.play(GD.add("B", positions["B"], parents=["G"], label="B"))
-        self.wait(0.5)
-        self.play(GD.add("C", positions["C"], parents=["G"], label="C"))
-        self.wait(0.5)
+        # Adjust layers after genesis
+        adjust_animations = GD.adjust_layers()
+        if adjust_animations:
+            self.play(adjust_animations)
 
-        # Merge some of them
-        self.play(GD.add("D", positions["D"], parents=["A", "B"], label="D"))
-        self.wait(0.5)
-        self.play(GD.add("E", positions["E"], parents=["A", "C"], label="E"))
-        self.wait(0.5)
+        blocks_remaining = BLOCKS - 1  # Subtract genesis block
+        batch_number = 0
 
-        # More complex merges that should trigger red classification
-        self.play(GD.add("F", positions["F"], parents=["B", "D"], label="F"))
-        self.wait(0.5)
-        self.play(GD.add("H", positions["H"], parents=["C", "E"], label="H"))
-        self.wait(0.5)
+        # Generate blocks in batches
+        while blocks_remaining > 0:
+            batch_number += 1
+            batch_size = min(randint(1, MAX_BLOCKS_PER_BATCH), blocks_remaining)
+            blocks_remaining -= batch_size
 
-        # Final merge - this should definitely be red due to k=2 constraint
-        self.play(GD.add("I", positions["I"], parents=["D", "E", "F", "H"], label="I"))
+            print(f"Batch {batch_number}: Adding {batch_size} blocks")
+
+            # Get current tips for parent selection
+            current_tips = GD.get_tips()
+
+            # Create batch of blocks
+            batch_animations = []
+            for i in range(batch_size):
+                block_id = f"L{batch_number}_{i + 1}"
+
+                # Select parents using Poisson distribution for anticone size
+                missed_blocks = poi(lam=AVG_AC)
+                selected_parents = GD.get_tips(missed_blocks=missed_blocks)
+
+                # Add block with GhostDAG algorithm
+                batch_animations.append(
+                    GD.add_with_ghostdag(block_id, selected_parents, label=f"{batch_number}.{i + 1}")
+                )
+
+                # Play batch animations simultaneously
+            self.play(batch_animations)
+            self.wait(0.3)
+
+            # Adjust layers after each batch
+            adjust_animations = GD.adjust_layers()
+            if adjust_animations:
+                self.play(adjust_animations)
+                self.wait(0.2)
+
+                # Color coding based on GhostDAG classification
+        self.wait(1)
+
+        # Color blue blocks (main chain)
+        if hasattr(GD, 'blue_blocks') and GD.blue_blocks:
+            blue_animations = [self.change_color(block_id, (0, 100, 255))
+                               for block_id in GD.blue_blocks]
+            self.play(blue_animations)
+            self.wait(0.5)
+
+            # Color red blocks (off main chain)
+        if hasattr(GD, 'red_blocks') and GD.red_blocks:
+            red_animations = [self.change_color(block_id, (255, 100, 100))
+                              for block_id in GD.red_blocks]
+            self.play(red_animations)
+            self.wait(0.5)
+
+            # Final layer adjustment and tree animation
+        final_adjust = GD.adjust_layers()
+        if final_adjust:
+            self.play(final_adjust)
+
+            # Create tree animation if available
+        if hasattr(GD, 'create_tree_animation_fast'):
+            print("Creating tree animations...")
+            tree_animations = GD.create_tree_animation_fast()
+            if tree_animations:
+                print("Playing tree animations...")
+                self.play(tree_animations, run_time=5.0)
+                print("Tree animations complete")
+
+        self.wait(3)
+
+        # Print final statistics
+        print(f"\nFinal LayerDAG Statistics:")
+        if hasattr(GD, 'blue_blocks'):
+            print(f"Blue blocks: {len(GD.blue_blocks)}")
+        if hasattr(GD, 'red_blocks'):
+            print(f"Red blocks: {len(GD.red_blocks)}")
+        if hasattr(GD, 'block_scores'):
+            print(f"Block scores available: {len(GD.block_scores)}")
+
+class AutoGhostDAGDemo(Scene):
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
+
+    def construct(self):
+        AVG_AC = 4  # Average anticone size
+        BLOCKS = 20
+        MAX_BLOCKS_PER_BATCH = 3
+
+        GD = GhostDAG(self, k=2)
+
+        # Genesis block
+        self.play(GD.add_with_ghostdag("Gen", label="G"))
+
+        blocks_remaining = BLOCKS - 1
+        batch_number = 0
+
+        while blocks_remaining > 0:
+            batch_number += 1
+            batch_size = min(randint(1, MAX_BLOCKS_PER_BATCH), blocks_remaining)
+            blocks_remaining -= batch_size
+
+            batch_animations = []
+            for i in range(batch_size):
+                block_id = f"L{batch_number}_{i + 1}"
+
+                # Use Poisson distribution for missed_blocks
+                missed_blocks = poi(lam=AVG_AC)
+                selected_parents = GD.get_tips(missed_blocks=missed_blocks)
+
+                batch_animations.append(
+                    GD.add_with_ghostdag(block_id, selected_parents, label=f"{batch_number}.{i + 1}")
+                )
+
+            self.play(batch_animations)
+
+            # Adjust layers after each batch
+            adjust_animations = GD.adjust_layers()
+            if adjust_animations:
+                self.play(adjust_animations)
+
+        self.wait(2)
+        # After all blocks are added, create final GHOSTDAG visualization
+        final_animations = GD.create_final_ghostdag_animation()
+        self.play(final_animations, run_time=5)
+
         self.wait(3)
 
 if __name__ == "__main__":
@@ -282,8 +393,9 @@ if __name__ == "__main__":
 #    scene = BlockDAGDemo()
 #    scene = FiftyBlocksDemo()
 #    scene = GhostDAGDemo()
-    scene = LayerDAGDemo()
-#    scene = ComplexGhostDAGDemo()
+#    scene = LayerDAGDemo()
+#    scene = AutoLayerDAGDemo()
+    scene = AutoGhostDAGDemo()
     scene.construct()
     scene.render()
 

@@ -1,6 +1,26 @@
 # engine/sprites/block.py
 import pygame
+from dataclasses import dataclass
+from typing import List, Dict, Optional
 
+
+@dataclass
+class GhostdagData:
+    """GHOSTDAG data calculated when block is created"""
+    blue_score: int = 0
+    blue_work: int = 0  # Could be float for more precision
+    selected_parent: Optional[str] = None  # sprite_id of selected parent
+    mergeset_blues: List[str] = None  # List of blue block sprite_ids
+    mergeset_reds: List[str] = None  # List of red block sprite_ids
+    blues_anticone_sizes: Dict[str, int] = None  # Map of blue block -> anticone size
+
+    def __post_init__(self):
+        if self.mergeset_blues is None:
+            self.mergeset_blues = []
+        if self.mergeset_reds is None:
+            self.mergeset_reds = []
+        if self.blues_anticone_sizes is None:
+            self.blues_anticone_sizes = {}
 
 class Block(pygame.sprite.Sprite):
     """
@@ -8,7 +28,7 @@ class Block(pygame.sprite.Sprite):
     The base physical representation of a block.
     """
 
-    def __init__(self, x, y, sprite_id, grid_size, text="Block", color=(255, 0, 0)):
+    def __init__(self, x, y, sprite_id, grid_size, text="Block", color=(0, 0, 255)):
         super().__init__()
 
         # Always calculate size based on grid_size (no fallback)

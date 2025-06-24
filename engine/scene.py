@@ -70,7 +70,8 @@ class Scene:
 
         # Define layer constants for proper z-ordering
         self.CONNECTION_LAYER = 0  # Behind everything
-        self.BLOCK_LAYER = 1  # On top of connections
+        self.SELECTED_CONNECTION_LAYER = 1  # Selected parent connections
+        self.BLOCK_LAYER = 2  # Always on top
 
         # Frame-based timing only
         self.current_frame = 0
@@ -118,29 +119,37 @@ class Scene:
 
     def add_connection(self, connection_id, start_block_id, end_block_id, **kwargs):
         """Add a connection line between two blocks."""
+
+        print(f"Scene.add_connection called with kwargs: {kwargs}")
+        if 'color' in kwargs:
+            print(f"Scene creating connection {connection_id} with color: {kwargs['color']}")
+
         start_block = self.sprite_registry.get(start_block_id)
         end_block = self.sprite_registry.get(end_block_id)
 
         if not start_block or not end_block:
             return None
 
+            # Extract selected_parent flag from kwargs
+        selected_parent = kwargs.get('selected_parent', False)
+
         connection = Connection(
             start_block, end_block,
             sprite_id=connection_id,
+            grid_size=self.coords.grid_size,
             color=kwargs.get('color', (255, 255, 255)),
-            width=kwargs.get('width', 2)
+            width_percent=kwargs.get('width_percent', 0.3),
+            selected_parent=selected_parent  # Pass the selected_parent flag
         )
 
         self.sprite_registry[connection_id] = connection
-        # Add connection to CONNECTION_LAYER so it appears behind blocks
-        self.sprites.add(connection, layer=self.CONNECTION_LAYER)
 
-        # Register connection as an alpha observer for both blocks
-#        start_block.alpha_observers.append(connection)
-#        end_block.alpha_observers.append(connection)
+        if selected_parent:
+            layer = self.SELECTED_CONNECTION_LAYER  # Layer 1
+        else:
+            layer = self.CONNECTION_LAYER  # Layer 0
 
-        # Initialize connection alpha to match start block's alpha
-#        connection.set_alpha(start_block.alpha)
+        self.sprites.add(connection, layer=layer)
 
         return connection
 

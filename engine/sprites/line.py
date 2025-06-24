@@ -5,25 +5,41 @@ import math
 class Connection(pygame.sprite.DirtySprite):
     """A line connection between two blocks using DirtySprite for optimized rendering."""
 
-    def __init__(self, start_block, end_block, sprite_id, color=(255, 255, 255), width=2):
+    def __init__(self, start_block, end_block, sprite_id, grid_size, color=(255, 255, 255), width_percent=0.2, selected_parent=False):
         super().__init__()
 
         self.sprite_id = sprite_id
         self.start_block = start_block
         self.end_block = end_block
         self.color = color
-        self.line_width = width
+        print(f"Connection {sprite_id} created with color: {color}")  # ADD THIS DEBUG
+
+        self.grid_size = grid_size
+
+        # Calculate line width as percentage of grid_size (similar to Block's approach)
+        self.line_width = max(int(grid_size * width_percent), 1)  # Minimum 1px
+
+        # Calculate arrow dimensions proportionally
+        self.arrow_length = max(int(grid_size * 0.8), 5)  # 80% of grid unit, minimum 5px
+        self.arrow_tip_margin = max(int(grid_size * 1.2), 10)  # 120% of grid unit, minimum 10px
 
         self.is_fading_in = False
         # Visual properties - start invisible for animation control
         self.alpha = 0
         self._visible = 0  # Start invisible, let animation controller handle this
 
+        self.selected_parent = selected_parent
+
+        # Set layer based on selected_parent attribute
+        if self.selected_parent:
+            self._layer = 1  # Higher layer renders on top
+        else:
+            self._layer = 0  # Default layer for non-selected connections
+
         # DirtySprite specific attributes
         self.dirty = 1
         self.blendmode = 0
         self.source_rect = None
-        self._layer = 0
 
         # Initialize the line
         self.update_line()
@@ -71,12 +87,12 @@ class Connection(pygame.sprite.DirtySprite):
         unit_dx = dx / length
         unit_dy = dy / length
 
-        # Apply configurable margin to shorten the arrow tip side
-        # The arrow tip will be drawn at 'adjusted_end_x, adjusted_end_y'
-        # This pulls the end point back from the block's edge
-        arrow_tip_margin = 15  # Example configurable margin in pixels
-        adjusted_end_x = end_x - unit_dx * arrow_tip_margin
-        adjusted_end_y = end_y - unit_dy * arrow_tip_margin
+        # Use grid-proportional margin instead of hardcoded 15
+        adjusted_end_x = end_x - unit_dx * self.arrow_tip_margin
+        adjusted_end_y = end_y - unit_dy * self.arrow_tip_margin
+
+        # Use grid-proportional margin for surface sizing
+        margin = self.line_width + max(int(self.grid_size * 0.2), 2)
 
         # Create surface large enough for the line (using original end_x, end_y for rect calculation)
         margin = self.line_width + 2
@@ -99,7 +115,7 @@ class Connection(pygame.sprite.DirtySprite):
                 self.image,
                 (surface_start_x, surface_start_y),
                 (surface_adjusted_end_x, surface_adjusted_end_y),
-                arrow_length=10  # This is the length of the arrow head itself
+                arrow_length=self.arrow_length  # Use grid-proportional arrow length
             )
 
             # Position the surface (using original min(start_x, end_x) for overall rect)
@@ -113,6 +129,21 @@ class Connection(pygame.sprite.DirtySprite):
         if self.dirty < 2:
             self.dirty = 1
 
+    def set_selected_parent(self, is_selected):
+        """Set whether this connection represents a selected parent."""
+        if self.selected_parent != is_selected:
+            self.selected_parent = is_selected
+
+            # Update layer based on selected parent status
+            if self.selected_parent:
+                self._layer = 1  # Render on top
+            else:
+                self._layer = 0  # Default layer
+
+            # Mark as dirty for re-rendering
+            if self.dirty < 2:
+                self.dirty = 1
+
     def set_alpha(self, alpha):
         """Set line alpha and mark as dirty."""
         if self.alpha != alpha:
@@ -125,6 +156,7 @@ class Connection(pygame.sprite.DirtySprite):
 
     def set_color(self, color):
         """Set line color and mark as dirty."""
+        print(f"Connection {self.sprite_id} color set to: {color}")  # ADD THIS LINE
         if self.color != color:
             self.color = color
             self.update_line()
@@ -135,9 +167,12 @@ class Connection(pygame.sprite.DirtySprite):
             self.line_width = width
             self.update_line()
 
-    def draw_arrow(self, surface, start, end, arrow_length=10):
-        """Draw an arrow instead of a simple line."""
-        # Draw main line  
+    def draw_arrow(self, surface, start, end, arrow_length=None):
+        """Draw an arrow with grid-proportional sizing."""
+        if arrow_length is None:
+            arrow_length = self.arrow_length
+
+            # Draw main line with grid-proportional width
         pygame.draw.line(surface, self.color, start, end, self.line_width)
 
         # Calculate arrow head  

@@ -3,9 +3,11 @@ import random
 
 
 class BlockDAG:
-    def __init__(self, scene):
+    def __init__(self, scene, history_size=20):
         self.scene = scene
         self.blocks = {}
+        self.history = []  # History of tip states
+        self.history_size = history_size
         # Store reference to block positions in scene
         if not hasattr(scene, '_block_positions'):
             scene._block_positions = {}
@@ -43,10 +45,13 @@ class BlockDAG:
                 if parent_id in self.blocks:
                     connection_id = f"{parent_id}_to_{block_id}"
 
-                    # Create connection with custom color if specified
+                    # Create connection with custom properties
                     connection_kwargs = {}
-                    if isinstance(parent, Parent) and parent.color:
-                        connection_kwargs['color'] = parent.color
+                    if isinstance(parent, Parent):
+                        if parent.color:
+                            connection_kwargs['color'] = parent.color
+                        if parent.selected_parent:
+                            connection_kwargs['selected_parent'] = True
 
                     self.scene.add_connection(connection_id, block_id, parent_id, **connection_kwargs)
 
@@ -56,7 +61,40 @@ class BlockDAG:
                         'sprite_id': connection_id
                     })
 
+        # After successfully adding the block, update history
+        self._update_history()
+
         return animations
+
+    def _update_history(self):
+        """Update the history with current tips."""
+        current_tips = self._get_current_tips()
+        self.history.insert(0, current_tips)
+        if len(self.history) > self.history_size:
+            self.history.pop()
+
+    def _get_current_tips(self):
+        """Get current tip blocks (blocks with no children)."""
+        tips = []
+        for block_id in self.blocks:
+            has_children = False
+            for other_id, other_data in self.blocks.items():
+                if other_id != block_id:
+                    other_parents = other_data['parents']
+                    parent_ids = [p.parent_id if isinstance(p, Parent) else p for p in other_parents]
+                    if block_id in parent_ids:
+                        has_children = True
+                        break
+            if not has_children:
+                tips.append(block_id)
+        return tips
+
+    def get_tips(self, missed_blocks=0):
+        """Get the tips from history at a specific point in time."""
+        if not self.history:
+            return []
+        history_index = min(missed_blocks, len(self.history) - 1)
+        return self.history[history_index]
 
     def shift(self, block_id, offset, run_time=1.0):
         """Move a block by grid offset."""
@@ -110,10 +148,11 @@ class BlockDAG:
 class Parent:
     """Helper for defining parent relationships with styling."""
 
-    def __init__(self, parent_id, color=None, width=2, **kwargs):
+    def __init__(self, parent_id, color=None, width=2, selected_parent=False, **kwargs):
         self.parent_id = parent_id
         self.color = color
         self.width = width
+        self.selected_parent = selected_parent
         self.kwargs = kwargs
 
 
@@ -176,19 +215,31 @@ class LayerDAG(BlockDAG):
 
     def _find_top_parent_layer(self, parent_names):
         """Find the topmost layer containing any parent block"""
+        # Extract parent IDs from Parent objects
+        parent_ids = []
+        for parent in parent_names:
+            if isinstance(parent, Parent):
+                parent_ids.append(parent.parent_id)
+            else:
+                parent_ids.append(parent)
+
         top_layer = 0
         for i, layer_blocks in enumerate(self.layers):
-            if any(parent in layer_blocks for parent in parent_names):
+            if any(parent_id in layer_blocks for parent_id in parent_ids):
                 top_layer = i
         return top_layer
 
     def _find_available_layer(self, top_parent_layer):
         """Find next available layer for block placement"""
-        # Check existing layers for space
-        for i in range(top_parent_layer + 1, len(self.layers)):
+        # Start from the layer AFTER the topmost parent layer
+        min_layer = top_parent_layer + 1
+
+        # Check existing layers for space, but only layers after all parents
+        for i in range(min_layer, len(self.layers)):
             if len(self.layers[i]) < self.width:
                 return i
-                # All layers full, create new one
+
+                # All layers full or no suitable layers exist, create new one
         return len(self.layers)
 
     def _calculate_layer_position(self, layer):
@@ -205,21 +256,9 @@ class LayerDAG(BlockDAG):
 
         return (x_pos, y_pos)
 
-    def get_tips(self):
-        """Get current tip blocks (blocks with no children)"""
-        tips = []
-        for block_id in self.blocks:
-            has_children = False
-            for other_id, other_data in self.blocks.items():
-                if other_id != block_id:
-                    other_parents = other_data['parents']
-                    parent_ids = [p.parent_id if isinstance(p, Parent) else p for p in other_parents]
-                    if block_id in parent_ids:
-                        has_children = True
-                        break
-            if not has_children:
-                tips.append(block_id)
-        return tips
+    def get_tips(self, missed_blocks=0):
+        """Get tip blocks, optionally from history."""
+        return super().get_tips(missed_blocks)
 
     def _auto_adjust_affected_layers(self, affected_layer):
         """Automatically adjust positions when blocks are added"""
@@ -323,9 +362,7 @@ class GhostDAG(LayerDAG):
         self.block_scores[block_id] = blue_score
 
         # Set visual properties
-        kwargs['color'] = color
-        label = kwargs.get('label', block_id)
-        kwargs['label'] = f"{label}({blue_score})"
+        kwargs['label'] = str(blue_score)  # Only show blue score
 
         # Highlight selected parent connection
         if parents:
@@ -334,14 +371,130 @@ class GhostDAG(LayerDAG):
                 parent_id = parent.parent_id if isinstance(parent, Parent) else parent
                 if parent_id == selected_parent:
                     if isinstance(parent, Parent):
-                        parent.color = (255, 215, 0)  # Gold
+                        parent.color = (0, 100, 255)  # Blue color
                         parent.width = 4
+                        parent.selected_parent = True  # Mark as selected parent
                     else:
-                        parents[i] = Parent(parent_id, color=(255, 215, 0), width=4)
+                        parents[i] = Parent(parent_id, color=(0, 100, 255), width=4, selected_parent=True)
 
-        # Call LayerDAG.add_with_layers method (which now auto-adjusts)
-        return super().add_with_layers(block_id, parent_names, **kwargs)
-        # Include all your GHOSTDAG helper methods here
+        return super().add_with_layers(block_id, parents, **kwargs)
+
+    def create_final_ghostdag_animation(self):
+        """Create final animation showing GHOSTDAG results with proper positioning"""
+        # Find block with highest blue score
+        highest_score_block = max(self.block_scores.items(), key=lambda x: x[1])
+        highest_block_id = highest_score_block[0]
+
+        animations = []
+
+        # Phase 1: Trace the selected parent chain
+        current = highest_block_id
+        chain_blocks = []
+
+        while current and current in self.blocks:
+            chain_blocks.append(current)
+            parents = self.blocks[current]['parents']
+            if parents:
+                selected_parent = self._find_selected_parent(parents)
+                current = selected_parent
+            else:
+                break
+
+                # Store original positions before any modifications
+        original_positions = {}
+        for block_id in self.blocks:
+            original_positions[block_id] = self.blocks[block_id]['grid_pos']
+
+            # Phase 2: Move parent chain to grid Y position 10 (same Y for all)
+        target_chain_y = 10  # Lower value to move toward bottom in your coordinate system
+
+        for block_id in chain_blocks:
+            current_pos = original_positions[block_id]
+            new_pos = (current_pos[0], target_chain_y)  # Same Y for all chain blocks
+
+            animations.append({
+                'type': 'move_to',
+                'sprite_id': block_id,
+                'target_grid_x': new_pos[0],
+                'target_grid_y': new_pos[1],
+                'duration': 1.0
+            })
+
+            # Phase 3: Position mergeset blocks above the parent chain
+        mergeset_blocks = []
+        for block_id in self.blocks:
+            if block_id not in chain_blocks and block_id != 'Gen':
+                parents = self.blocks[block_id]['parents']
+                if parents:
+                    selected_parent = self._find_selected_parent(parents)
+                    if selected_parent in chain_blocks:
+                        mergeset_blocks.append((block_id, selected_parent, self.block_scores.get(block_id, 0)))
+
+                        # Sort mergeset blocks by blue score (ascending order like GHOSTDAG)
+        mergeset_blocks.sort(key=lambda x: x[2])
+
+        # Position mergeset blocks above their selected parents
+        # In your coordinate system, "above" means higher Y values
+        mergeset_base_offset_y = 8  # Consistent vertical offset from the parent chain's final Y
+
+        # Dictionary to track how many mergeset blocks are stacked above each parent
+        parent_mergeset_stack_count = {}
+
+        for i, (block_id, selected_parent_id, score) in enumerate(mergeset_blocks):
+            # Get the current stack count for this parent
+            stack_index = parent_mergeset_stack_count.get(selected_parent_id, 0)
+            parent_mergeset_stack_count[selected_parent_id] = stack_index + 1
+
+            parent_pos = original_positions[selected_parent_id]
+            current_pos = original_positions[block_id]
+
+            # Calculate horizontal offset: proportional to original difference, or a small fixed value
+            # This makes the block offset slightly towards its original X relative to its parent
+            x_diff = current_pos[0] - parent_pos[0]
+            x_offset = x_diff * 0.2  # Adjust multiplier (e.g., 0.1 to 0.5) for desired "pull"
+            if abs(x_offset) < 0.5:  # Ensure a minimum offset if difference is too small
+                x_offset = 0.5 if x_diff >= 0 else -0.5
+
+                # Calculate vertical offset: base offset + stack index * spacing
+            y_offset = mergeset_base_offset_y + (stack_index * 2.0)  # 2.0 is spacing between stacked mergeset blocks
+
+            new_pos = (parent_pos[0] + x_offset, target_chain_y + y_offset)
+
+            animations.append({
+                'type': 'move_to',
+                'sprite_id': block_id,
+                'target_grid_x': new_pos[0],
+                'target_grid_y': new_pos[1],
+                'duration': 1.0,
+                'delay': 0.5 + i * 0.1
+            })
+
+            # Phase 4: Color the main chain blue
+        for i, block_id in enumerate(chain_blocks):
+            animations.append({
+                'type': 'color_change',
+                'sprite_id': block_id,
+                'target_color': (50, 150, 255),  # Blue for main chain
+                'duration': 0.3,
+                'delay': 2.0 + i * 0.1  # After movement completes
+            })
+
+            # Phase 5: Color mergeset blocks
+        for i, (block_id, _, _) in enumerate(mergeset_blocks):
+            if block_id in self.blue_blocks:
+                color = (100, 200, 255)  # Lighter blue for honest mergeset blocks
+            else:
+                color = (255, 100, 50)  # Red for dishonest blocks
+
+            animations.append({
+                'type': 'color_change',
+                'sprite_id': block_id,
+                'target_color': color,
+                'duration': 0.3,
+                'delay': 2.5 + i * 0.1
+            })
+
+        return animations
 
     def _check_blue_candidate(self, block_id, parents):
         # Your existing implementation
@@ -357,11 +510,10 @@ class GhostDAG(LayerDAG):
         return anticone_size <= self.k
 
     def _find_selected_parent(self, parents):
-        # Your existing implementation
         if not parents:
             return None
         parent_ids = [p.parent_id if isinstance(p, Parent) else p for p in parents]
-        return max(parent_ids, key=lambda p: self.block_work.get(p, 0))
+        return max(parent_ids, key=lambda p: self.block_scores.get(p, 0))  # Use blue_scores instead of block_work
 
     def _calculate_blue_score(self, block_id, parents):
         # Your existing implementation
