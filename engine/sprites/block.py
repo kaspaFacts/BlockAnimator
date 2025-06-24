@@ -7,23 +7,33 @@ from typing import List, Dict, Optional
 class GhostdagData:
     """GHOSTDAG data calculated when block is created"""
     blue_score: int = 0
-#    blue_work: int = 0  # currently not used or calculated
     selected_parent: Optional[str] = None  # sprite_id of selected parent
-    mergeset_blues: List[str] = None  # List of blue block sprite_ids
-    mergeset_reds: List[str] = None  # List of red block sprite_ids
+    mergeset: List[str] = None  # Full ordered mergeset (selected parent first, then ordered mergeset)
     blues_anticone_sizes: Dict[str, int] = None  # Map of blue block -> anticone size
     hash: str = None  # Block hash for tiebreaking (using sprite_id)
 
     def __post_init__(self):
-        if self.mergeset_blues is None:
-            self.mergeset_blues = []
-        if self.mergeset_reds is None:
-            self.mergeset_reds = []
+        if self.mergeset is None:
+            self.mergeset = []
         if self.blues_anticone_sizes is None:
             self.blues_anticone_sizes = {}
-        # Set hash to sprite_id if not provided
         if self.hash is None and hasattr(self, '_sprite_id'):
             self.hash = self._sprite_id
+
+    def get_mergeset_blues(self):
+        """Extract blue blocks from mergeset (first k+1 blocks including selected parent)"""
+        # In real GHOSTDAG, blues are stored in order with selected parent first
+        return self.mergeset[:len(self.mergeset) - len(self.get_mergeset_reds())]
+
+    def get_mergeset_reds(self):
+        """Extract red blocks from mergeset (remaining blocks after blues)"""
+        blues_count = len(self.mergeset) - len([b for b in self.mergeset if self._is_red(b)])
+        return self.mergeset[blues_count:]
+
+    def _is_red(self, block_id):
+        """Helper to determine if a block is red - implement based on your k-cluster logic"""
+        # This would need to be implemented based on your actual blue/red determination
+        pass
 
 class Block(pygame.sprite.Sprite):
     """
@@ -151,6 +161,65 @@ class GhostdagBlock(Block):
         # Calculate GHOSTDAG data at creation time
         self.ghostdag_data = self._calculate_ghostdag_data()
 
+    def _calculate_mergeset(self, selected_parent_id, parent_ids):
+        """Calculate the mergeset - all blocks in anticone of selected parent"""
+        if not self.scene_registry or not selected_parent_id:
+            return set()
+
+            # Start with non-selected parents
+        queue = [pid for pid in parent_ids if pid != selected_parent_id]
+        mergeset = set(queue)
+        past_of_selected = set()
+
+        while queue:
+            current = queue.pop(0)
+            if current not in self.scene_registry:
+                continue
+
+            current_block = self.scene_registry[current]
+            if not hasattr(current_block, 'parents'):
+                continue
+
+                # For each parent of current block
+            for parent_id in current_block.parents:
+                if parent_id in mergeset or parent_id in past_of_selected:
+                    continue
+
+                    # Check if parent is in past of selected parent
+                if self._is_ancestor(parent_id, selected_parent_id):
+                    past_of_selected.add(parent_id)
+                    continue
+
+                    # Add to mergeset and queue for processing
+                mergeset.add(parent_id)
+                queue.append(parent_id)
+
+        return mergeset
+
+    def _is_ancestor(self, ancestor_id, descendant_id):
+        """Check if ancestor_id is in the past of descendant_id"""
+        if not self.scene_registry or ancestor_id == descendant_id:
+            return False
+
+            # Simple BFS to check reachability
+        visited = set()
+        queue = [descendant_id]
+
+        while queue:
+            current = queue.pop(0)
+            if current == ancestor_id:
+                return True
+            if current in visited:
+                continue
+            visited.add(current)
+
+            if current in self.scene_registry:
+                current_block = self.scene_registry[current]
+                if hasattr(current_block, 'parents'):
+                    queue.extend(current_block.parents)
+
+        return False
+
     def _calculate_ghostdag_data(self):
         """Calculate GHOSTDAG data when block is created"""
         print(f"Block {self.sprite_id}: parents={self.parents}")
@@ -209,35 +278,157 @@ class GhostdagBlock(Block):
         return best_parent or (self.parents[0] if self.parents else None)
 
     def _run_ghostdag_algorithm(self, ghostdag_data):
-        """Run proper GHOSTDAG algorithm using blue score"""
+        """Run proper GHOSTDAG algorithm using mergeset calculation and k-cluster validation."""
         if not self.scene_registry:
             return ghostdag_data
 
         selected_parent_id = ghostdag_data.selected_parent
 
-        # FIRST: Populate the mergeset by processing non-selected parents
-        for parent_id in self.parents:
-            if parent_id != selected_parent_id and parent_id in self.scene_registry:
-                # Simplified k-cluster check: if we have fewer than k blues, add as blue
-                if len(ghostdag_data.mergeset_blues) < self.ghostdag_k:
-                    ghostdag_data.mergeset_blues.append(parent_id)
-                else:
-                    ghostdag_data.mergeset_reds.append(parent_id)
+        # STEP 1: Calculate the actual mergeset (anticone of selected parent)
+        mergeset_candidates = self._calculate_mergeset(selected_parent_id, self.parents)
 
-                    # SECOND: Calculate blue score after mergeset is populated
+        # STEP 2: Build ordered mergeset starting with selected parent
+        ordered_mergeset = []
+        if selected_parent_id:
+            ordered_mergeset.append(selected_parent_id)
+
+        # Initialize temporary mergeset blues and reds for the new block
+        temp_mergeset_blues = [selected_parent_id] if selected_parent_id else []
+        temp_mergeset_reds = []
+        temp_blues_anticone_sizes = {selected_parent_id: 0} if selected_parent_id else {}
+
+        # STEP 3: Process candidates and add to mergeset in order, applying k-cluster rules
+        for candidate_id in sorted(mergeset_candidates):  # Sort for deterministic order
+            # Create a temporary GhostdagData to simulate the new block's state if candidate is blue
+            # This is a simplified representation of the Rust `new_block_data` being passed around
+            temp_new_block_data = GhostdagData(
+                blue_score=0,  # This will be recalculated later
+                selected_parent=selected_parent_id,
+                mergeset=temp_mergeset_blues + temp_mergeset_reds,  # Current state of mergeset
+                blues_anticone_sizes=temp_blues_anticone_sizes.copy(),
+                hash=self.sprite_id
+            )
+
+            coloring_output = self._check_blue_candidate(temp_new_block_data, candidate_id, self.ghostdag_k)
+
+            if coloring_output['is_blue']:
+                temp_mergeset_blues.append(candidate_id)
+                temp_blues_anticone_sizes.update(coloring_output['blues_anticone_sizes'])
+            else:
+                temp_mergeset_reds.append(candidate_id)
+
+        # Finalize the mergeset for the new block
+        ghostdag_data.mergeset = temp_mergeset_blues + temp_mergeset_reds
+
+        # Calculate blue score
         if selected_parent_id and selected_parent_id in self.scene_registry:
             selected_parent_block = self.scene_registry[selected_parent_id]
             if hasattr(selected_parent_block, 'ghostdag_data'):
-                # Blue score = selected parent's blue score + 1 (for selected parent) + mergeset blues
-                ghostdag_data.blue_score = selected_parent_block.ghostdag_data.blue_score + 1 + len(
-                    ghostdag_data.mergeset_blues)
-            else:
-                ghostdag_data.blue_score = 1 + len(ghostdag_data.mergeset_blues)
+                # Blue score = selected parent's blue score + 1 (for selected parent) + blue blocks in mergeset
+                blue_blocks_in_mergeset = len(
+                    temp_mergeset_blues) - 1  # Subtract 1 because selected parent is already counted
+                ghostdag_data.blue_score = selected_parent_block.ghostdag_data.blue_score + 1 + blue_blocks_in_mergeset
         else:
-            # Genesis block case - no selected parent
-            ghostdag_data.blue_score = len(ghostdag_data.mergeset_blues)
+            # Genesis block case or no selected parent
+            ghostdag_data.blue_score = len(temp_mergeset_blues)  # Only count its own blue mergeset blocks
+
+        # Store the final blues_anticone_sizes
+        ghostdag_data.blues_anticone_sizes = temp_blues_anticone_sizes
 
         return ghostdag_data
+
+    def _check_blue_candidate(self, new_block_data, blue_candidate_id, k):
+        """
+        Determines if a candidate block can be colored blue based on k-cluster rules.
+        Returns a dict indicating if blue, and updated anticone sizes if so.
+        """
+        # Condition 1: The maximum length of new_block_data.mergeset_blues can be K+1
+        # (selected parent + k blue blocks)
+        if len(new_block_data.mergeset) >= k + 1:  # This check is simplified, should be based on actual blues
+            return {'is_blue': False}
+
+        candidate_blues_anticone_sizes = {}  # This will store anticone sizes for blue blocks if candidate is blue
+        candidate_blue_anticone_size = 0
+
+        # Simulate walking the chain from the new block's selected parent backwards
+        current_chain_block_id = new_block_data.selected_parent
+        while current_chain_block_id:
+            if current_chain_block_id == blue_candidate_id:
+                # If blue_candidate is in the past of the current chain block, it can be blue
+                return {'is_blue': True, 'blues_anticone_sizes': candidate_blues_anticone_sizes}
+
+            if current_chain_block_id not in self.scene_registry:
+                break  # Should not happen in a valid DAG
+
+            current_chain_block = self.scene_registry[current_chain_block_id]
+            if not hasattr(current_chain_block, 'ghostdag_data'):
+                break  # Should not happen for GhostdagBlocks
+
+            # Check blue peers in the current chain block's mergeset (simplified)
+            # In the real algorithm, this iterates over the blue set of the *new block*
+            # and checks against the candidate.
+            for peer_id in current_chain_block.ghostdag_data.mergeset:  # Simplified: iterate over current block's mergeset
+                if peer_id == blue_candidate_id:
+                    continue  # Skip self
+
+                # Check if peer is in the past of blue_candidate (not in its anticone)
+                if self._is_ancestor(peer_id, blue_candidate_id):
+                    continue
+
+                    # Peer is in anticone of blue_candidate, check k limits
+                # This is where the complex anticone size calculation and comparison happens
+                # For a full implementation, you'd need to calculate the actual anticone size
+                # of `peer_id` with respect to `blue_candidate_id` and the current `new_block_data`
+
+                # Simplified check: just count
+                candidate_blue_anticone_size += 1
+                if candidate_blue_anticone_size > k:
+                    return {'is_blue': False}
+
+                    # This is a placeholder for the second k-cluster condition:
+                # For every blue block in new_block_data.mergeset_blues,
+                # |(anticone-of-blue-block ∩ blue-set-new-block) ∪ {candidate-block}| ≤ K
+                # This requires calculating anticone sizes for existing blue blocks if candidate is added.
+                # For now, we'll just add a dummy entry.
+                candidate_blues_anticone_sizes[peer_id] = 0  # Placeholder, needs real calculation
+
+            current_chain_block_id = current_chain_block.ghostdag_data.selected_parent  # Move up the chain
+
+        # If loop finishes without returning, it means no violation found
+        return {'is_blue': True, 'blues_anticone_sizes': candidate_blues_anticone_sizes}
+
+    def _blue_anticone_size(self, block_id, context_ghostdag_data):
+        """
+        Calculates the blue anticone size of 'block_id' within the context of 'context_ghostdag_data'.
+        This is a highly simplified placeholder. A full implementation requires:
+        1. Traversing the past of 'context_ghostdag_data' (the new block)
+        2. For each block in that past, checking if it's in the anticone of 'block_id'
+        3. Counting only the *blue* blocks that satisfy this condition.
+        4. Using the stored `blues_anticone_sizes` from previous blocks to optimize.
+        """
+        # This is a very complex part of the algorithm. For a visualization,
+        # you might need to simplify or approximate.
+        # A proper implementation would involve:
+        # - A BFS/DFS traversal from `context_ghostdag_data`'s selected parent and mergeset blues.
+        # - For each visited block, check if it's in the anticone of `block_id`
+        #   (i.e., not in the past of `block_id` and `block_id` not in its past).
+        # - Counting only the blue blocks.
+        # - Utilizing `context_ghostdag_data.blues_anticone_sizes` for memoization.
+
+        # For now, return a dummy value or a simple count based on direct parents
+        # This will likely lead to incorrect GHOSTDAG behavior for complex DAGs.
+
+        # A very basic approximation: count how many blue blocks in context are not ancestors of block_id
+        count = 0
+        if block_id in self.scene_registry:
+            for blue_block_in_context in context_ghostdag_data.mergeset:  # Simplified: iterate over context's mergeset
+                if blue_block_in_context == block_id:
+                    continue
+                    # Check if blue_block_in_context is in anticone of block_id
+                if not self._is_ancestor(blue_block_in_context, block_id) and \
+                        not self._is_ancestor(block_id, blue_block_in_context):
+                    count += 1
+        return count
 
     def get_outline_properties(self):
         """GHOSTDAG-specific outline styling"""

@@ -1,5 +1,5 @@
 """BlockDAG helper with grid coordinates."""
-from engine.animations import FadeInAnimation, MoveToAnimation, ColorChangeAnimation
+from engine.animations import FadeInAnimation, FadeToAnimation, MoveToAnimation, ColorChangeAnimation
 
 class BlockDAG:
     def __init__(self, scene, history_size=20):
@@ -160,7 +160,7 @@ class Parent:
         self.kwargs = kwargs
 
 class LayerDAG(BlockDAG):
-    def __init__(self, scene, layer_spacing=15, chain_spacing=8, width=4):
+    def __init__(self, scene, layer_spacing=10, chain_spacing=6, width=4):
         super().__init__(scene)
         self.layers = []
         self.layer_spacing = layer_spacing
@@ -420,12 +420,12 @@ class GhostDAG(LayerDAG):
             else:
                 break
 
-                # Store original positions
+        # Store original positions
         original_positions = {}
         for block_id in self.blocks:
             original_positions[block_id] = self.blocks[block_id]['grid_pos']
 
-            # Phase 2: Move parent chain to target Y position
+        # Phase 2: Move parent chain to target Y position
         target_chain_y = 10
 
         for block_id in chain_blocks:
@@ -439,52 +439,71 @@ class GhostDAG(LayerDAG):
                 duration=1.0
             ))
 
-            # Phase 3: Position mergeset blocks using GhostdagData
+        # Phase 3: Position mergeset blocks aligned with chain block's selected parent
         mergeset_blocks = []
 
-        for block_id, block_data in self.blocks.items():
-            if block_id not in chain_blocks and block_id != 'Gen':
-                sprite = block_data['sprite']
-                if hasattr(sprite, 'ghostdag_data'):
-                    selected_parent = sprite.ghostdag_data.selected_parent
-                    if selected_parent and selected_parent in chain_blocks:
-                        mergeset_blocks.append((
-                            block_id,
-                            selected_parent,
-                            sprite.ghostdag_data.blue_score
-                        ))
+        for chain_block_id in chain_blocks:
+            chain_sprite = self.blocks[chain_block_id]['sprite']
+            if hasattr(chain_sprite, 'ghostdag_data') and chain_sprite.ghostdag_data.mergeset:
+                # Get all blocks in this chain block's mergeset (excluding the selected parent)
+                for mergeset_block_id in chain_sprite.ghostdag_data.mergeset[1:]:  # Skip selected parent
+                    if (mergeset_block_id in self.blocks and
+                            mergeset_block_id not in chain_blocks and
+                            mergeset_block_id != 'Gen'):
 
-                        # Sort mergeset blocks by blue score
-        mergeset_blocks.sort(key=lambda x: x[2])
+                        # Avoid duplicates
+                        if not any(mb[0] == mergeset_block_id for mb in mergeset_blocks):
+                            mergeset_sprite = self.blocks[mergeset_block_id]['sprite']
+                            if hasattr(mergeset_sprite, 'ghostdag_data'):
+                                mergeset_blocks.append((
+                                    mergeset_block_id,
+                                    chain_block_id,  # The chain block that contains this in its mergeset
+                                    mergeset_sprite.ghostdag_data.blue_score
+                                ))
 
-        # Position mergeset blocks above their selected parents
-        mergeset_base_offset_y = 8
-        parent_mergeset_stack_count = {}
+                                # Position mergeset blocks aligned with their chain block's selected parent
+        mergeset_base_offset_y = 8  # Vertical offset from chain
+        block_spacing = 6  # Spacing between mergeset blocks
 
-        for i, (block_id, selected_parent_id, score) in enumerate(mergeset_blocks):
-            stack_index = parent_mergeset_stack_count.get(selected_parent_id, 0)
-            parent_mergeset_stack_count[selected_parent_id] = stack_index + 1
+        # Group mergeset blocks by their chain block
+        chain_mergeset_groups = {}
+        for block_id, chain_block_id, score in mergeset_blocks:
+            if chain_block_id not in chain_mergeset_groups:
+                chain_mergeset_groups[chain_block_id] = []
+            chain_mergeset_groups[chain_block_id].append((block_id, score))
 
-            parent_pos = original_positions[selected_parent_id]
-            current_pos = original_positions[block_id]
+            # Position each group aligned with chain block's selected parent
+        animation_delay = 0.5
+        for chain_block_id, group_blocks in chain_mergeset_groups.items():
+            chain_sprite = self.blocks[chain_block_id]['sprite']
 
-            x_diff = current_pos[0] - parent_pos[0]
-            x_offset = x_diff * 0.2
-            if abs(x_offset) < 0.5:
-                x_offset = 0.5 if x_diff >= 0 else -0.5
+            # Get the selected parent's position (first block in mergeset)
+            if (hasattr(chain_sprite, 'ghostdag_data') and
+                    chain_sprite.ghostdag_data.mergeset and
+                    chain_sprite.ghostdag_data.mergeset[0] in original_positions):
 
-            y_offset = mergeset_base_offset_y + (stack_index * 2.0)
-            new_pos = (parent_pos[0] + x_offset, target_chain_y + y_offset)
+                selected_parent_id = chain_sprite.ghostdag_data.mergeset[0]
+                selected_parent_pos = original_positions[selected_parent_id]
 
-            animations.append(MoveToAnimation(
-                sprite_id=block_id,
-                target_grid_x=new_pos[0],
-                target_grid_y=new_pos[1],
-                duration=1.0,
-                delay=0.5 + i * 0.1
-            ))
+                # Sort blocks in this group by score
+                group_blocks.sort(key=lambda x: x[1])
 
-            # Phase 4: Color the main chain blue
+                for i, (block_id, score) in enumerate(group_blocks):
+                    # Position at selected parent's X, offset vertically
+                    y_offset = mergeset_base_offset_y + (i * block_spacing)
+                    new_pos = (selected_parent_pos[0], target_chain_y + y_offset)
+
+                    animations.append(MoveToAnimation(
+                        sprite_id=block_id,
+                        target_grid_x=new_pos[0],
+                        target_grid_y=new_pos[1],
+                        duration=1.0,
+                        delay=animation_delay
+                    ))
+
+                    animation_delay += 0.1
+
+        # Phase 4: Color the main chain blue
         for i, block_id in enumerate(chain_blocks):
             animations.append(ColorChangeAnimation(
                 sprite_id=block_id,
@@ -492,19 +511,18 @@ class GhostDAG(LayerDAG):
                 duration=0.3,
                 delay=2.0 + i * 0.1
             ))
-
-            # Phase 5: Color mergeset blocks using GhostdagData
-        for i, (block_id, selected_parent_id, _) in enumerate(mergeset_blocks):
+        # Phase 5: Color mergeset blocks using unified mergeset
+        for i, (block_id, chain_block_id, _) in enumerate(mergeset_blocks):
             sprite = self.blocks[block_id]['sprite']
 
-            # Check if block is in the mergeset_blues of its selected parent
             if hasattr(sprite, 'ghostdag_data'):
-                parent_sprite = self.blocks[selected_parent_id]['sprite']
-                if (hasattr(parent_sprite, 'ghostdag_data') and
-                        block_id in parent_sprite.ghostdag_data.mergeset_blues):
-                    color = (100, 200, 255)  # Light blue for blue mergeset blocks
+                parent_sprite = self.blocks[chain_block_id]['sprite']
+                if hasattr(parent_sprite, 'ghostdag_data'):
+                    # Determine if block is blue based on position in unified mergeset
+                    is_blue = self._is_block_blue_in_mergeset(block_id, parent_sprite)
+                    color = (100, 200, 255) if is_blue else (255, 100, 50)
                 else:
-                    color = (255, 100, 50)  # Red for red mergeset blocks
+                    color = (128, 128, 128)  # Gray fallback
             else:
                 color = (128, 128, 128)  # Gray fallback
 
@@ -515,7 +533,34 @@ class GhostDAG(LayerDAG):
                 delay=2.5 + i * 0.1
             ))
 
+        # Collect all animated blocks
+        animated_blocks = set(chain_blocks)
+        for block_id, _, _ in mergeset_blocks:
+            animated_blocks.add(block_id)
+
+        # Phase 6: Fade out all non-animated blocks
+        fade_out_delay = 3.0  # Start fading out after other animations
+        for block_id, block_data in self.blocks.items():
+            if block_id not in animated_blocks:
+                animations.append(FadeToAnimation(
+                    sprite_id=block_id,
+                    target_alpha=10,
+                    duration=1.0,
+                    delay=fade_out_delay
+                ))
+
         return animations
+
+    def _is_block_blue_in_mergeset(self, block_id, parent_block):
+        """Helper to determine if a block is blue in parent's mergeset"""
+        if not hasattr(parent_block, 'ghostdag_data') or not parent_block.ghostdag_data.mergeset:
+            return False
+
+            # In unified mergeset, blues come first (selected parent + k blues)
+        k = getattr(parent_block, 'ghostdag_k', self.k)
+        blue_boundary = min(k + 1, len(parent_block.ghostdag_data.mergeset))
+
+        return block_id in parent_block.ghostdag_data.mergeset[:blue_boundary]
 
     def rebalance_all_layers(self):
         """Manually trigger a full rebalancing of all layers"""

@@ -5,10 +5,12 @@ from enum import Enum
 
 class AnimationType(Enum):
     FADE_IN = "fade_in"
+    FADE_OUT = "fade_out"
+    FADE_TO = "fade_to"
     MOVE_TO = "move_to"
     COLOR_CHANGE = "color_change"
+    ALPHA_CHANGE = "alpha_change"
     CAMERA_MOVE = "camera_move"
-    FADE_TO = "fade_to"
     CHANGE_APPEARANCE = "change_appearance"
     WAIT = "wait"
 
@@ -45,6 +47,10 @@ class FadeInAnimation(Animation):
     type: AnimationType = field(default=AnimationType.FADE_IN, init=False)
     target_alpha: int = 255
 
+@dataclass
+class FadeOutAnimation(Animation):
+    type: AnimationType = field(default=AnimationType.FADE_OUT, init=False)
+    target_alpha: int = 0
 
 @dataclass
 class MoveToAnimation(Animation):
@@ -52,12 +58,15 @@ class MoveToAnimation(Animation):
     target_grid_x: float = 0.0
     target_grid_y: float = 0.0
 
-
 @dataclass
 class ColorChangeAnimation(Animation):
     type: AnimationType = field(default=AnimationType.COLOR_CHANGE, init=False)
     target_color: tuple = (255, 255, 255)
 
+@dataclass
+class AlphaChangeAnimation(Animation):
+    type: AnimationType = field(default=AnimationType.ALPHA_CHANGE, init=False)
+    target_alpha: int = (255)
 
 @dataclass
 class CameraMoveAnimation(Animation):
@@ -66,19 +75,16 @@ class CameraMoveAnimation(Animation):
     target_y: float = 0.0
     scene: Optional[Any] = None
 
-
 @dataclass
 class FadeToAnimation(Animation):
     type: AnimationType = field(default=AnimationType.FADE_TO, init=False)
     target_alpha: int = 255
-
 
 @dataclass
 class ChangeAppearanceAnimation(Animation):
     type: AnimationType = field(default=AnimationType.CHANGE_APPEARANCE, init=False)
     target_color: Optional[tuple] = None
     target_alpha: Optional[int] = None
-
 
 @dataclass
 class WaitAnimation(Animation):

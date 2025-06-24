@@ -6,7 +6,7 @@ from engine.sprites.block import Block, GhostdagBlock
 from engine.sprites.line import Connection
 
 from engine.animations import (
-    MoveToAnimation, FadeToAnimation, ColorChangeAnimation,
+    MoveToAnimation, FadeToAnimation, AlphaChangeAnimation, ColorChangeAnimation,
     ChangeAppearanceAnimation, CameraMoveAnimation, WaitAnimation
 )
 
@@ -142,7 +142,9 @@ class Scene:
             # Auto-determine connection properties for GHOSTDAG blocks
         if isinstance(end_block, GhostdagBlock):
             is_selected_parent = (start_block.sprite_id == end_block.ghostdag_data.selected_parent)
-            is_blue_connection = start_block.sprite_id in end_block.ghostdag_data.mergeset_blues
+
+            # NEW: Check if connection is blue using the unified mergeset
+            is_blue_connection = self._is_blue_connection(start_block.sprite_id, end_block)
 
             # Auto-determine color based on GHOSTDAG classification
             if 'color' not in kwargs:
@@ -163,7 +165,6 @@ class Scene:
             **kwargs
         )
 
-        # ADD THESE MISSING LINES:
         self.sprite_registry[connection_id] = connection
 
         if kwargs.get('selected_parent', False):
@@ -172,11 +173,23 @@ class Scene:
             layer = self.CONNECTION_LAYER  # Layer 0
 
         self.sprites.add(connection, layer=layer)
-
         return connection
 
-        # Rest of existing connection logic...
-        return connection
+    def _is_blue_connection(self, parent_id, child_block):
+        """Helper method to determine if a connection represents a blue relationship"""
+        if not hasattr(child_block, 'ghostdag_data') or not child_block.ghostdag_data.mergeset:
+            return False
+
+            # In the unified mergeset, blues come first (after selected parent)
+        # You'll need to implement the logic to determine the blue/red boundary
+        # This depends on how you implement the k-cluster validation in your GhostdagData
+
+        # For now, simple approach: check if parent is in first k+1 positions
+        # (selected parent + k blues)
+        k = getattr(child_block, 'ghostdag_k', 3)
+        blue_boundary = min(k + 1, len(child_block.ghostdag_data.mergeset))
+
+        return parent_id in child_block.ghostdag_data.mergeset[:blue_boundary]
 
     def update_connections(self):
         """Update all connection lines to follow their blocks."""
@@ -265,6 +278,10 @@ class Scene:
         renderer = VideoRenderer(self, filename)
         renderer.generate_video()
 
+    #####################
+    # Block/Line Methods
+    #####################
+
     def move_to(self, sprite_id, target_pos, duration=1.0):
         """Create movement animation using current sprite positions."""
         if sprite_id not in self.sprite_registry:
@@ -299,6 +316,17 @@ class Scene:
         return ColorChangeAnimation(
             sprite_id=sprite_id,
             target_color=target_color,
+            duration=duration
+        )
+
+    def change_alpha(self, sprite_id, target_alpha, duration=1.0):
+        """Create color change animation for a sprite."""
+        if sprite_id not in self.sprite_registry:
+            return None
+
+        return AlphaChangeAnimation(
+            sprite_id=sprite_id,
+            target_alpha=target_alpha,
             duration=duration
         )
 
