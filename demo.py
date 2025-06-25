@@ -371,7 +371,7 @@ class AutoGhostDAGDemo(Scene):
                 selected_parents = GD.get_tips(missed_blocks=missed_blocks)
 
                 batch_animations.append(
-                    GD.add_with_ghostdag(block_id, selected_parents, label=f"{batch_number}.{i + 1}")
+                    GD.add_with_ghostdag(block_id, parents = selected_parents, label=f"{batch_number}.{i + 1}")
                 )
 
             self.play(batch_animations)

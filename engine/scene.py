@@ -102,16 +102,16 @@ class Scene:
         """Add a sprite at grid coordinates with specified consensus type."""
         pixel_x, pixel_y = self.coords.grid_to_pixel(grid_x, grid_y)
         text = kwargs.pop('text', sprite_id)
+        parents = kwargs.pop('parents', None)  # Extract parents parameter
 
         if consensus_type == "ghostdag":
             # Ensure scene_registry is properly passed
-            scene_registry = kwargs.pop('scene_registry', self.sprite_registry)
             sprite = GhostdagBlock(
                 pixel_x, pixel_y,
                 sprite_id=sprite_id,
                 grid_size=self.coords.grid_size,
                 text=text,
-                scene_registry=scene_registry,  # Use the passed registry
+                parents=parents,  # Pass parents explicitly
                 **kwargs
             )
         else:
@@ -123,7 +123,7 @@ class Scene:
                 **kwargs
             )
 
-            # Store grid coordinates in the sprite
+        # Store grid coordinates in the sprite
         sprite.grid_x = grid_x
         sprite.grid_y = grid_y
 

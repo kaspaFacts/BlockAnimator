@@ -12,7 +12,6 @@ class Connection(pygame.sprite.DirtySprite):
         self.start_block = start_block
         self.end_block = end_block
         self.color = color
-        print(f"Connection {sprite_id} created with color: {color}")  # ADD THIS DEBUG
 
         self.grid_size = grid_size
 
@@ -156,7 +155,6 @@ class Connection(pygame.sprite.DirtySprite):
 
     def set_color(self, color):
         """Set line color and mark as dirty."""
-        print(f"Connection {self.sprite_id} color set to: {color}")  # ADD THIS LINE
         if self.color != color:
             self.color = color
             self.update_line()
