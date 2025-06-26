@@ -65,7 +65,7 @@ class Block(pygame.sprite.Sprite):
         super().__init__()
 
         # Core visual properties
-        self.size = int(grid_size * 4)  # 500% of grid unit
+        self.size = int(grid_size * 4)  # 400% of grid unit
         self.grid_size = grid_size
         self.sprite_id = sprite_id
         self.color = color
@@ -168,6 +168,43 @@ class Block(pygame.sprite.Sprite):
         self.color = color
         self.render()
 
+class BitcoinBlock(Block):
+    def __init__(self, x, y, sprite_id, grid_size, text="Block", color=(255, 165, 0),
+                 parent: str = None, **kwargs):
+        super().__init__(x, y, sprite_id, grid_size, text, color)
+
+        # Bitcoin blocks have exactly one parent (except genesis)
+        if parent is not None:
+            self.parents = [parent]  # Single parent as list for compatibility
+            self.parent = parent  # Direct access to single parent
+        else:
+            self.parents = []  # Genesis block
+            self.parent = None
+
+    def set_parent(self, parent_id: str):
+        """Set the single parent for this Bitcoin block."""
+        if self.parents:
+            raise ValueError("Bitcoin blocks can only have one parent. Use replace_parent() instead.")
+        self.parent = parent_id
+        self.parents = [parent_id]
+
+    def replace_parent(self, new_parent_id: str):
+        """Replace the existing parent (for reorganizations)."""
+        self.parent = new_parent_id
+        self.parents = [new_parent_id]
+
+    def get_display_text(self):
+        """Bitcoin-specific text display."""
+        if self.parent:
+            return f"{self.text}\nParent: {self.parent[:6]}..."
+        else:
+            return f"{self.text}\n(Genesis)"
+
+    def get_outline_properties(self):
+        """Bitcoin-specific orange outline."""
+        outline_color = (255, 140, 0)  # Orange outline for Bitcoin
+        outline_width = max(int(self.grid_size * 0.3), 2)  # Slightly thicker
+        return outline_color, outline_width
 
 class GhostdagBlock(Block):
     def __init__(self, x, y, sprite_id, grid_size, text="Block", color=(0, 0, 255),
@@ -368,4 +405,4 @@ class GhostdagBlock(Block):
         return f"{self.text}\nBS:{self.ghostdag_data.blue_score}"
 
     #   TODO calculate blue_work for ghostdag blocks, by using a fast hash of the id that outputs binary,
-#        every hash will be difficulty 0 (sufficient difficulty), and leading zeros will increase difficulty
+    #        every hash will be difficulty 0 (sufficient difficulty), and leading zeros will increase difficulty

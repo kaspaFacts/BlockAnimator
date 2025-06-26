@@ -2,7 +2,7 @@ import pygame
 from engine.coordinate_system import CoordinateSystem
 from engine.animation_controller import AnimationController
 from engine.renderer import VideoRenderer
-from engine.sprites.block import Block, GhostdagBlock
+from engine.sprites.block import *
 from engine.sprites.line import Connection
 
 from engine.animations import (
@@ -102,26 +102,21 @@ class Scene:
         """Add a sprite at grid coordinates with specified consensus type."""
         pixel_x, pixel_y = self.coords.grid_to_pixel(grid_x, grid_y)
         text = kwargs.pop('text', sprite_id)
-        parents = kwargs.pop('parents', None)  # Extract parents parameter
+        parents = kwargs.pop('parents', None)
 
-        if consensus_type == "ghostdag":
-            # Ensure scene_registry is properly passed
-            sprite = GhostdagBlock(
-                pixel_x, pixel_y,
-                sprite_id=sprite_id,
-                grid_size=self.coords.grid_size,
-                text=text,
-                parents=parents,  # Pass parents explicitly
-                **kwargs
-            )
-        else:
-            sprite = Block(
-                pixel_x, pixel_y,
-                sprite_id=sprite_id,
-                grid_size=self.coords.grid_size,
-                text=text,
-                **kwargs
-            )
+        # Block type factory
+        block_types = {
+            "basic": lambda: Block(pixel_x, pixel_y, sprite_id, self.coords.grid_size, text, **kwargs),
+            "ghostdag": lambda: GhostdagBlock(pixel_x, pixel_y, sprite_id, self.coords.grid_size, text, parents=parents,
+                                              **kwargs),
+            "bitcoin": lambda: BitcoinBlock(pixel_x, pixel_y, sprite_id, self.coords.grid_size, text,
+                                            parent=parents[0] if parents else None, **kwargs)
+        }
+
+        if consensus_type not in block_types:
+            raise ValueError(f"Unknown consensus type: {consensus_type}")
+
+        sprite = block_types[consensus_type]()
 
         # Store grid coordinates in the sprite
         sprite.grid_x = grid_x
