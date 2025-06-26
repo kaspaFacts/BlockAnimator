@@ -1,5 +1,8 @@
 """BlockDAG helper with grid coordinates."""
-from engine.animations import FadeInAnimation, FadeToAnimation, MoveToAnimation, ColorChangeAnimation
+import pygame
+from engine.animations.animations import FadeInAnimation, FadeToAnimation, MoveToAnimation, ColorChangeAnimation
+from engine.sprites.block import Block, GhostdagBlock, BitcoinBlock
+from engine.sprites.line import Connection
 
 class BlockDAG:
     def __init__(self, scene, history_size=20):
@@ -7,18 +10,97 @@ class BlockDAG:
         self.blocks = {}
         self.history = []  # History of tip states
         self.history_size = history_size
-        # Store reference to block positions in scene
+
+        # Take over sprite management from scene
+        self.sprite_registry = {}
+        self.sprites = pygame.sprite.LayeredUpdates()
+
+        # Layer constants moved from Scene
+        self.CONNECTION_LAYER = 0
+        self.SELECTED_CONNECTION_LAYER = 1
+        self.BLOCK_LAYER = 2
+
+        # Store reference to block positions
         if not hasattr(scene, '_block_positions'):
             scene._block_positions = {}
+
+            # Register this DAG with the scene
+        scene.register_dag(self)
+
+    def add_sprite(self, sprite_id, grid_x, grid_y, consensus_type="basic", **kwargs):
+        """Add a sprite at grid coordinates with specified consensus type."""
+        pixel_x, pixel_y = self.scene.coords.grid_to_pixel(grid_x, grid_y)
+        text = kwargs.pop('text', sprite_id)
+        parents = kwargs.pop('parents', None)
+
+        # Block type factory moved from Scene
+        block_types = {
+            "basic": lambda: Block(pixel_x, pixel_y, sprite_id, self.scene.coords.grid_size, text, **kwargs),
+            "ghostdag": lambda: GhostdagBlock(pixel_x, pixel_y, sprite_id, self.scene.coords.grid_size, text,
+                                              parents=parents, **kwargs),
+            "bitcoin": lambda: BitcoinBlock(pixel_x, pixel_y, sprite_id, self.scene.coords.grid_size, text,
+                                            parent=parents[0] if parents else None, **kwargs)
+        }
+
+        if consensus_type not in block_types:
+            raise ValueError(f"Unknown consensus type: {consensus_type}")
+
+        sprite = block_types[consensus_type]()
+        sprite.grid_x = grid_x
+        sprite.grid_y = grid_y
+
+        self.sprite_registry[sprite_id] = sprite
+        self.sprites.add(sprite, layer=self.BLOCK_LAYER)
+        return sprite
+
+    def add_connection(self, connection_id, start_block_id, end_block_id, **kwargs):
+        """Enhanced connection creation with GHOSTDAG awareness."""
+        start_block = self.sprite_registry.get(start_block_id)
+        end_block = self.sprite_registry.get(end_block_id)
+
+        if not start_block or not end_block:
+            return None
+
+            # GHOSTDAG-aware connection logic
+        if isinstance(end_block, GhostdagBlock):
+            is_selected_parent = (start_block.sprite_id == end_block.ghostdag_data.selected_parent)
+            is_blue_connection = self._is_blue_connection(start_block.sprite_id, end_block)
+
+            if 'color' not in kwargs:
+                if is_selected_parent:
+                    kwargs['color'] = (0, 255, 0)  # Green for selected parent
+                elif is_blue_connection:
+                    kwargs['color'] = (0, 0, 255)  # Blue for blue blocks
+                else:
+                    kwargs['color'] = (255, 0, 0)  # Red for red blocks
+
+            kwargs['selected_parent'] = is_selected_parent
+
+        connection = Connection(start_block, end_block, sprite_id=connection_id, grid_size=self.scene.coords.grid_size,
+                                **kwargs)
+        self.sprite_registry[connection_id] = connection
+
+        layer = self.SELECTED_CONNECTION_LAYER if kwargs.get('selected_parent', False) else self.CONNECTION_LAYER
+        self.sprites.add(connection, layer=layer)
+        return connection
+
+    def _is_blue_connection(self, parent_id, child_block):
+        """Helper method to determine if a connection represents a blue relationship"""
+        if not hasattr(child_block, 'ghostdag_data') or not child_block.ghostdag_data.mergeset:
+            return False
+
+        k = getattr(child_block, 'ghostdag_k', 3)
+        blue_boundary = min(k + 1, len(child_block.ghostdag_data.mergeset))
+        return parent_id in child_block.ghostdag_data.mergeset[:blue_boundary]
 
     def add(self, block_id, grid_pos, label=None, parents=None, **kwargs):
         """Add a block at grid position with automatic parent connections."""
         grid_x, grid_y = grid_pos
 
-        sprite = self.scene.add_sprite(
+        sprite = self.add_sprite(
             block_id, grid_x, grid_y,
             text=label or block_id,
-            parents=parents,  # Add this line
+            parents=parents,
             **kwargs
         )
 
@@ -52,8 +134,7 @@ class BlockDAG:
                         if parent.selected_parent:
                             connection_kwargs['selected_parent'] = True
 
-                            # NEW: Set color based on whether this is the selected parent
-                    # Check if the sprite has GHOSTDAG data and if this parent is the selected parent
+                            # Set color based on whether this is the selected parent
                     if (hasattr(sprite, 'ghostdag_data') and
                             sprite.ghostdag_data and
                             sprite.ghostdag_data.selected_parent == parent_id):
@@ -63,7 +144,7 @@ class BlockDAG:
                         if 'color' not in connection_kwargs:
                             connection_kwargs['color'] = (255, 255, 255)  # White for other parents
 
-                    self.scene.add_connection(connection_id, block_id, parent_id, **connection_kwargs)
+                    self.add_connection(connection_id, block_id, parent_id, **connection_kwargs)
 
                     # Add connection fade-in animation
                     animations.append(FadeInAnimation(
@@ -74,6 +155,28 @@ class BlockDAG:
         self._update_history()
 
         return animations
+
+        # Animation helper methods moved from Scene
+
+    def move_to(self, sprite_id, target_pos, duration=1.0):
+        """Create movement animation using current sprite positions."""
+        if sprite_id not in self.sprite_registry:
+            return None
+
+        target_x, target_y = target_pos
+        return MoveToAnimation(sprite_id=sprite_id, target_grid_x=target_x, target_grid_y=target_y, duration=duration)
+
+    def fade_to(self, sprite_id, target_alpha, duration=1.0):
+        """Create opacity animation for a sprite."""
+        if sprite_id not in self.sprite_registry:
+            return None
+        return FadeToAnimation(sprite_id=sprite_id, target_alpha=target_alpha, duration=duration)
+
+    def change_color(self, sprite_id, target_color, duration=1.0):
+        """Create color change animation for a sprite."""
+        if sprite_id not in self.sprite_registry:
+            return None
+        return ColorChangeAnimation(sprite_id=sprite_id, target_color=target_color, duration=duration)
 
     def _update_history(self):
         """Update the history with current tips."""
@@ -89,11 +192,11 @@ class BlockDAG:
             has_children = False
             for other_id, other_block in self.blocks.items():
                 if other_id != block_id:
-                    other_parents = other_block.parents
-                    parent_ids = [p.parent_id if isinstance(p, Parent) else p for p in other_parents]
-                    if block_id in parent_ids:
-                        has_children = True
-                        break
+                    if hasattr(other_block, 'parents') and other_block.parents:
+                        parent_ids = [p.parent_id if isinstance(p, Parent) else p for p in other_block.parents]
+                        if block_id in parent_ids:
+                            has_children = True
+                            break
             if not has_children:
                 tips.append(block_id)
         return tips
@@ -111,11 +214,11 @@ class BlockDAG:
             return None
 
         block = self.blocks[block_id]
-        current_grid = block.grid_pos  # Access attribute directly
+        current_grid = block.grid_pos
         new_grid = (current_grid[0] + offset[0], current_grid[1] + offset[1])
 
         # Update tracking
-        block.grid_pos = new_grid  # Set attribute directly
+        block.grid_pos = new_grid
 
         return MoveToAnimation(
             sprite_id=block_id,
@@ -130,7 +233,7 @@ class BlockDAG:
             connection_id = f"{from_block_id}_to_{to_block_id}"
 
         if from_block_id in self.blocks and to_block_id in self.blocks:
-            connection = self.scene.add_connection(
+            connection = self.add_connection(
                 connection_id, from_block_id, to_block_id, **kwargs
             )
 
@@ -158,7 +261,6 @@ class Parent:
         self.width = width
         self.selected_parent = selected_parent
         self.kwargs = kwargs
-
 
 class BitcoinDAG(BlockDAG):
     def __init__(self, scene, spacing_multiplier=2, **kwargs):

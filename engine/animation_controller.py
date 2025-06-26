@@ -1,5 +1,5 @@
 from typing import List, Dict, Any
-from engine.animations import Animation, AnimationType
+from engine.animations.animations import Animation, AnimationType
 
 class AnimationController:
     def __init__(self, fps: int = 30):

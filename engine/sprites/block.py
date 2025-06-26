@@ -1,7 +1,7 @@
-# engine/sprites/block.py
 import pygame
 from dataclasses import dataclass
 from typing import List, Dict, Optional
+from engine.animations.block_animation_proxy import BlockAnimationProxy
 
 
 @dataclass
@@ -55,6 +55,7 @@ class GhostdagData:
         """Returns total size of mergeset"""
         return len(self.mergeset_blues) + len(self.mergeset_reds)
 
+
 class Block(pygame.sprite.Sprite):
     """
     Base block sprite for any consensus mechanism.
@@ -96,7 +97,16 @@ class Block(pygame.sprite.Sprite):
         pygame.font.init()
         self.font = pygame.font.Font(None, font_size)
 
+        self._animate = None  # Initialize the animate property
+
         self.render()
+
+    @property
+    def animate(self):
+        """Return an animation proxy for this block."""
+        if self._animate is None:
+            self._animate = BlockAnimationProxy(self)
+        return self._animate
 
     def render(self):
         """Render the block with consensus-specific customizations."""
@@ -168,6 +178,7 @@ class Block(pygame.sprite.Sprite):
         self.color = color
         self.render()
 
+
 class BitcoinBlock(Block):
     def __init__(self, x, y, sprite_id, grid_size, text="Block", color=(255, 165, 0),
                  parent: str = None, **kwargs):
@@ -206,6 +217,7 @@ class BitcoinBlock(Block):
         outline_width = max(int(self.grid_size * 0.3), 2)  # Slightly thicker
         return outline_color, outline_width
 
+
 class GhostdagBlock(Block):
     def __init__(self, x, y, sprite_id, grid_size, text="Block", color=(0, 0, 255),
                  parents: list = None, **kwargs):
@@ -213,11 +225,13 @@ class GhostdagBlock(Block):
 
         self.parents = parents or []
         self.ghostdag_data = GhostdagData(hash=self.sprite_id)  # Initialize with default data
+
     #
     def calculate_ghostdag_data(self, ghostdag_k, dag_blocks):
         """Calculate GHOSTDAG data with external parameters"""
         self.ghostdag_data = self._run_ghostdag_algorithm(ghostdag_k, dag_blocks)
-    #
+        #
+
     def _run_ghostdag_algorithm(self, ghostdag_k, dag_blocks):
         """Run GHOSTDAG algorithm with passed parameters"""
         selected_parent = self._find_selected_parent(dag_blocks)
@@ -264,7 +278,8 @@ class GhostdagBlock(Block):
         print(f"DEBUG: Mergeset blues: {ghostdag_data.mergeset_blues}")
         print(f"DEBUG: Mergeset reds: {ghostdag_data.mergeset_reds}")
         return ghostdag_data
-    #
+        #
+
     def _find_selected_parent(self, dag_blocks):
         """Find parent with highest blue score, using hash as tiebreaker"""
         # Genesis block has no parents
@@ -304,7 +319,8 @@ class GhostdagBlock(Block):
             first_parent = self.parents[0]
             parent_id = first_parent.parent_id if hasattr(first_parent, 'parent_id') else first_parent
             return str(parent_id)
-    #
+            #
+
     def _calculate_mergeset(self, selected_parent_id, parent_ids, dag_blocks):
         """Calculate the mergeset - all blocks in anticone of selected parent"""
         if not dag_blocks or not selected_parent_id:
@@ -372,21 +388,23 @@ class GhostdagBlock(Block):
                         queue.append(parent_id)
 
         return False
-    #
+        #
+
     def _can_be_blue(self, candidate_id, current_blues, ghostdag_k, dag_blocks):
         """Simplified k-cluster check using dataclass properties"""
         # Rule 1: Can't exceed k+1 total blues
         if len(current_blues) >= ghostdag_k + 1:
             return False
 
-        # Rule 2: Simplified anticone check
+            # Rule 2: Simplified anticone check
         anticone_count = sum(1 for blue_id in current_blues
                              if blue_id != candidate_id
                              and not self._is_ancestor(blue_id, candidate_id, dag_blocks)  # Pass dag_blocks
                              and not self._is_ancestor(candidate_id, blue_id, dag_blocks))  # Pass dag_blocks
 
         return anticone_count <= ghostdag_k
-    #
+        #
+
     def _calculate_blue_score(self, selected_parent_id, mergeset_blues, dag_blocks):
         """Calculate blue score using Kaspa's formula"""
         # Genesis block case - no selected parent

@@ -4,40 +4,53 @@ from numpy.random import poisson as poi
 from engine.scene import Scene, simultaneous, sequential
 from engine.helpers.block_dag import *
 
-
+#
 class BlockDAGDemo(Scene):
     def construct(self):
         BD = BlockDAG(self)
 
-        # Genesis block near bottom-left with margin
-        self.play(BD.add("Gen", (10, 25), label="G", consensus_type="ghostdag"))
+        # Add blocks and store references to the block objects
+        gen_block_animations = BD.add("Gen", (10, 25), label="G", consensus_type="ghostdag")
+        self.play(gen_block_animations)
+        gen_block = BD.blocks["Gen"]
 
-        # Block with single parent - space horizontally
-        self.play(BD.add("X", (25, 25), label="X", parents=["Gen"], consensus_type="ghostdag"))
+        x_block_animations = BD.add("X", (25, 25), label="X", parents=["Gen"], consensus_type="ghostdag")
+        self.play(x_block_animations)
+        x_block = BD.blocks["X"]
 
-        # Block with multiple parents - position higher and to the right
-        self.play(BD.add("Y", (30, 35), label=":)",
-                         parents=["Gen", Parent("X", color=(0, 255, 0))],
-                         consensus_type="ghostdag"))
+        y_block_animations = BD.add("Y", (30, 35), label=":)",
+                                    parents=["Gen", Parent("X", color=(0, 255, 0))],
+                                    consensus_type="ghostdag")
+        self.play(y_block_animations)
+        y_block = BD.blocks["Y"]
 
-        # Block with single parent - further right and middle height
-        self.play(BD.add("Z", (45, 25), label="Z", parents=["Y"], consensus_type="ghostdag"))
+        z_block_animations = BD.add("Z", (45, 25), label="Z", parents=["Y"], consensus_type="ghostdag")
+        self.play(z_block_animations)
+        z_block = BD.blocks["Z"]
 
-        # Move blocks using absolute positioning instead of shift
-        # Move Y block to a new absolute position
+        # Move blocks using the new Manim-style animate API
         new_y_pos = (35, 18)
-        self.play(self.move_to("Y", new_y_pos, duration=2))
+        self.play(y_block.animate.move_to(new_y_pos, duration=2))
 
         self.wait(3)
 
+#
 class BlockCameraDemo(Scene):
     def construct(self):
         BD = BlockDAG(self)
 
-        # Place blocks across the field to demonstrate camera movement
-        self.play(BD.add("Gen", (8, 25), label="G", consensus_type="bitcoin"))
-        self.play(BD.add("X", (30, 25), label="X", consensus_type="bitcoin"))
-        self.play(BD.add("Y", (45, 30), label=":)", consensus_type="bitcoin"))
+        # Add blocks and store references to the block objects
+        gen_block_animations = BD.add("Gen", (8, 25), label="G", consensus_type="bitcoin")
+        self.play(gen_block_animations)
+        gen_block = BD.blocks["Gen"]
+
+        x_block_animations = BD.add("X", (30, 25), label="X", consensus_type="bitcoin")
+        self.play(x_block_animations)
+        x_block = BD.blocks["X"]
+
+        y_block_animations = BD.add("Y", (45, 30), label=":)", consensus_type="bitcoin")
+        self.play(y_block_animations)
+        y_block = BD.blocks["Y"]
 
         # Animate camera movements to follow the blocks
         self.play(self.animate_camera_to_sprite("X", duration=1.0))
@@ -50,7 +63,7 @@ class BlockCameraDemo(Scene):
         self.play(self.animate_camera_move(15, -13, duration=1.0))
         self.wait(1)
 
-
+#
 class BitcoinChainDemo(Scene):
     def __init__(self):
         super().__init__(resolution="720p", fps=30)
@@ -60,8 +73,12 @@ class BitcoinChainDemo(Scene):
         BD = BitcoinDAG(self)
 
         # Add genesis block
-        self.play(BD.add_bitcoin_block("Genesis", label="Genesis"))
+        gen_animations = BD.add_bitcoin_block("Genesis", label="Genesis")
+        self.play(gen_animations)
         self.wait(0.5)
+
+        # Store block objects for animate API
+        block_objects = {"Genesis": BD.blocks["Genesis"]}
 
         # Add a sequence of Bitcoin blocks, each extending the chain tip
         block_ids = ["Genesis"]
@@ -80,8 +97,9 @@ class BitcoinChainDemo(Scene):
             if animations:
                 self.play(animations)
             self.wait(0.3)
+            block_objects[block_id] = BD.blocks[block_id]  # Store block object
 
-            # Validate chain integrity
+        # Validate chain integrity
         if BD.validate_chain_integrity():
             print("✓ Bitcoin chain integrity validated")
 
@@ -107,37 +125,29 @@ class BitcoinChainDemo(Scene):
 
             # Move camera to follow the chain
         if len(block_ids) > 4:
-            middle_block = block_ids[len(block_ids) // 2]
-            camera_anim = self.animate_camera_to_sprite(middle_block, duration=2.0)
+            middle_block_id = block_ids[len(block_ids) // 2]
+            camera_anim = self.animate_camera_to_sprite(middle_block_id, duration=2.0)
             if camera_anim:
                 self.play(camera_anim)
 
         self.wait(2)
 
-        # Final animation: fade all blocks to show the linear structure
+        # Final animation: fade all blocks to show the linear structure using animate API
         fade_animations = []
-        for i, block_id in enumerate(block_ids):
+        for block_id in block_ids:
             fade_animations.append(
-                self.fade_to(block_id, 150, duration=1.0)
+                block_objects[block_id].animate.fade_to(150, duration=1.0)
             )
 
         self.play(*fade_animations)
         self.wait(1)
 
+#
 class FiftyBlocksDemo(Scene):
-    """
-    Stress test for seeing how long it takes to animate many objects (more than 500) simultaneously without breaking
-    Set your resolution and FPS, set as scene(at the bottom), and run demo.py
-    Each block has an outline, multiple labels, and 9 connections (except for the first blocks who do not have that history)
-    Each block is also changing color and opacity while moving from circle to original positions
-    Currently video output is 61 seconds long
-    Time to render the output will depend on your computer
-    """
     def __init__(self):
         super().__init__(resolution="240p", fps=8)
 
     def construct(self):
-        # Use the basic BlockDAG for this demo
         BD = BlockDAG(self)
 
         # Calculate field dimensions (same as before)
@@ -156,7 +166,8 @@ class FiftyBlocksDemo(Scene):
         spacing_x = available_width / (grid_width - 1) if grid_width > 1 else 2
         spacing_y = available_height / (grid_height - 1) if grid_height > 1 else 2
 
-        # Add 50 blocks using GhostdagBlock
+        # Add 50 blocks using GhostdagBlock and store block objects
+        block_objects = {}
         block_ids = []
         for i in range(50):
             row = i // 10
@@ -169,15 +180,12 @@ class FiftyBlocksDemo(Scene):
 
             # Create parent relationships - connect to previous block + skip every 2 blocks
             parents = []
-
-            # Always connect to immediate previous block (if it exists)
             if i > 0:
                 parent_id = f"Block_{i - 1}"
                 parents.append(parent_id)
 
-                # Add 9 more connections, skipping every 2 blocks
-            skip_offset = 3  # Start with offset 3 (skip 2 blocks from previous)
-            connections_added = 1 if i > 0 else 0  # Count the immediate previous connection
+            skip_offset = 3
+            connections_added = 1 if i > 0 else 0
 
             while connections_added < 10 and skip_offset <= i:
                 parent_index = i - skip_offset
@@ -185,19 +193,16 @@ class FiftyBlocksDemo(Scene):
                     parent_id = f"Block_{parent_index}"
                     parents.append(parent_id)
                     connections_added += 1
-                skip_offset += 3  # Skip 2 blocks (so add 3 to offset)
+                skip_offset += 3
 
-            # Use consensus_type="ghostdag" to create GhostdagBlock instances
             animations = BD.add(block_id, (x_pos, y_pos), label=f"{i}", parents=parents, consensus_type="ghostdag")
-
-            # Use Scene's play method which handles the animation controller properly
             if animations:
                 self.play(animations)
+            block_objects[block_id] = BD.blocks[block_id]  # Store block object
 
-                # Wait for all blocks to appear
         self.wait(1)
 
-        # Create circular movement animations using Scene methods
+        # Create circular movement animations using animate API
         move_animations = []
         center_x = horizontal_field / 2
         center_y = 25
@@ -209,36 +214,31 @@ class FiftyBlocksDemo(Scene):
             new_x = center_x + radius * math.cos(angle)
             new_y = center_y + radius * math.sin(angle)
 
-            # Use Scene's move_to method which creates proper MoveToAnimation objects
-            move_animations.append(self.move_to(block_id, (new_x, new_y), duration=3.0))
+            move_animations.append(block_objects[block_id].animate.move_to((new_x, new_y), duration=3.0))
 
-            # Play all movements simultaneously using Scene's play method
         self.play(*move_animations)
         self.wait(2)
 
-        # Return to original positions with color changes
+        # Return to original positions with color changes using animate API
         return_animations = []
         for i, block_id in enumerate(block_ids):
-            # Recalculate original positions
             row = i // 10
             col = i % 10
             original_x = start_x + col * spacing_x
             original_y = start_y + row * spacing_y
 
-            # Use Scene's animation methods
-            return_animations.append(self.move_to(block_id, (original_x, original_y), duration=3.0))
+            return_animations.append(block_objects[block_id].animate.move_to((original_x, original_y), duration=3.0))
 
-            # Color and alpha changes
             if i < 25:
-                return_animations.append(self.change_color(block_id, (0, 0, 255), duration=3.0))
-                return_animations.append(self.fade_to(block_id, 75, duration=3.0))
+                return_animations.append(block_objects[block_id].animate.change_color((0, 0, 255), duration=3.0))
+                return_animations.append(block_objects[block_id].animate.fade_to(75, duration=3.0))
             else:
-                return_animations.append(self.change_color(block_id, (0, 255, 0), duration=3.0))
+                return_animations.append(block_objects[block_id].animate.change_color((0, 255, 0), duration=3.0))
 
-                # Play all return animations simultaneously
         self.play(*return_animations)
         self.wait(2)
 
+#
 class LayerDAGDemo(Scene):
     def __init__(self):
         super().__init__(resolution="480p", fps=15)
@@ -246,180 +246,210 @@ class LayerDAGDemo(Scene):
     def construct(self):
         LD = GhostDAG(self, k=3)
 
-        # Single animation
-        self.play(LD.add_with_ghostdag("Gen", label="G"))
+        # Add genesis block
+        gen_animations = LD.add_with_ghostdag("Gen", label="G")
+        self.play(gen_animations)
+        gen_block = LD.blocks["Gen"]
 
         # Simultaneous animations (list)
-        u_animations = [LD.add_with_ghostdag(f"U{i}", ["Gen"], label=str(i)) for i in range(3)]
+        u_blocks = []
+        u_animations = []
+        for i in range(3):
+            block_id = f"U{i}"
+            anims = LD.add_with_ghostdag(block_id, ["Gen"], label=str(i))
+            u_animations.extend(anims)
+            u_blocks.append(LD.blocks[block_id])
         self.play(u_animations)
 
         # Sequential animations (list of lists)
-        tips = LD.get_tips() # get tips to add as parents
-        w_animations = [LD.add_with_ghostdag(f"W{i}", tips, label=f"W{i}") for i in range(5)]
+        tips = LD.get_tips()
+        w_blocks = []
+        w_animations_group = []
+        for i in range(5):
+            block_id = f"W{i}"
+            anims = LD.add_with_ghostdag(block_id, tips, label=f"W{i}")
+            w_animations_group.extend(anims)
+            w_blocks.append(LD.blocks[block_id])
+
         adjust_animations = LD.adjust_layers()
 
-        self.play([w_animations, adjust_animations])  # Sequential: fade all W, then adjust
+        self.play([w_animations_group, adjust_animations])
 
-        color_changes = [self.change_color(tip, (0, 255, 0)) for tip in tips]
+        # Use animate API for color changes
+        color_changes = []
+        for tip_id in tips:
+            if tip_id in LD.blocks:  # Ensure block exists
+                color_changes.append(LD.blocks[tip_id].animate.change_color((0, 255, 0)))
         self.play(color_changes)
 
-        tips = LD.get_tips() # get current DAG tips to color red
-        color_changes = [self.change_color(tip, (255, 0, 0)) for tip in tips]
+        tips = LD.get_tips()
+        color_changes = []
+        for tip_id in tips:
+            if tip_id in LD.blocks:  # Ensure block exists
+                color_changes.append(LD.blocks[tip_id].animate.change_color((255, 0, 0)))
         self.play(color_changes)
 
         self.wait(2.0)
 
+#
 class GhostDAGDemo(Scene):
     def __init__(self):
         super().__init__(resolution="480p", fps=15)
 
     def construct(self):
-        GD = GhostDAG(self, k=1)  # Use k=3 for better visualization
+        GD = GhostDAG(self, k=1)
 
-        # Genesis block
-        self.play(GD.add("Genesis", (10, 25), label="G"))
+        # Add blocks and store references
+        gen_animations = GD.add("Genesis", (10, 25), label="G")
+        self.play(gen_animations)
+        genesis_block = GD.blocks["Genesis"]
         self.wait(1)
 
-        # Linear chain first
-        self.play(GD.add("A", (25, 25), parents=["Genesis"], label="A"))
+        a_animations = GD.add("A", (25, 25), parents=["Genesis"], label="A")
+        self.play(a_animations)
+        a_block = GD.blocks["A"]
         self.wait(1)
 
-        self.play(GD.add("B", (40, 25), parents=["A"], label="B"))
+        b_animations = GD.add("B", (40, 25), parents=["A"], label="B")
+        self.play(b_animations)
+        b_block = GD.blocks["B"]
         self.wait(1)
 
-        # Create a fork - two blocks with same parent
-        self.play(GD.add("C", (55, 35), parents=["B"], label="C"))
+        c_animations = GD.add("C", (55, 35), parents=["B"], label="C")
+        self.play(c_animations)
+        c_block = GD.blocks["C"]
         self.wait(1)
 
-        self.play(GD.add("D", (55, 15), parents=["B"], label="D"))
+        d_animations = GD.add("D", (55, 15), parents=["B"], label="D")
+        self.play(d_animations)
+        d_block = GD.blocks["D"]
         self.wait(1)
 
-        # Merge the fork - this will test GHOSTDAG algorithm
-        self.play(GD.add("E", (70, 25),
-                                       parents=["C", Parent("D", color=(0, 255, 0))],
-                                       label="E"))
+        e_animations = GD.add("E", (70, 25),
+                              parents=["C", Parent("D", color=(0, 255, 0))],
+                              label="E")
+        self.play(e_animations)
+        e_block = GD.blocks["E"]
         self.wait(1)
 
-        # Add more blocks to see k-cluster constraints
-        self.play(GD.add("F", (85, 35), parents=["E"], label="F"))
+        f_animations = GD.add("F", (85, 35), parents=["E"], label="F")
+        self.play(f_animations)
+        f_block = GD.blocks["F"]
         self.wait(1)
 
-        # Create another parallel block to test k limits
-        self.play(GD.add("G", (70, 40), parents=["C"], label="G"))
+        g_animations = GD.add("G", (70, 40), parents=["C"], label="G")
+        self.play(g_animations)
+        g_block = GD.blocks["G"]
         self.wait(1)
 
-        # This should trigger red classification due to k-cluster violation
-        self.play(GD.add("H", (85, 15),
-                                       parents=["D", "G", "F"],
-                                       label="H"))
+        h_animations = GD.add("H", (85, 15),
+                              parents=["D", "G", "F"],
+                              label="H")
+        self.play(h_animations)
+        h_block = GD.blocks["H"]
         self.wait(2)
 
         # Show final state
         print("\nFinal GHOSTDAG State:")
-        print(f"Blue blocks: {GD.blue_blocks}")
-        print(f"Red blocks: {GD.red_blocks}")
-        print(f"Block scores: {GD.block_scores}")
+        # Assuming GD has these attributes after add calls
+        print(f"Blue blocks: {getattr(GD, 'blue_blocks', 'N/A')}")
+        print(f"Red blocks: {getattr(GD, 'red_blocks', 'N/A')}")
+        print(f"Block scores: {getattr(GD, 'block_scores', 'N/A')}")
 
-
+#
 class SimultaneousVsSequentialDemo(Scene):
     def __init__(self):
         super().__init__(resolution='480p', fps=15)
 
     def construct(self):
-        # Calculate positions for 5 blocks evenly spaced horizontally
-        aspect_ratio = self.width / self.height
-        field_width = 50 * aspect_ratio  # Approximate field width
+        BD = BlockDAG(self)
 
-        # Top row positions (1/3 from top)
+        aspect_ratio = self.width / self.height
+        field_width = 50 * aspect_ratio
+
         top_y = 50 - (50 / 3)
-        # Bottom row positions (1/3 from bottom)
         bottom_y = 50 / 3
 
-        # Calculate x positions for 5 blocks evenly spaced
-        spacing = field_width / 6  # 6 gaps for 5 blocks
+        spacing = field_width / 6
         x_positions = [spacing * (i + 1) for i in range(5)]
 
-        # Create all blocks (initially invisible)
-        top_blocks = []
-        bottom_blocks = []
+        # Create all blocks using DAG and store block objects
+        top_block_objects = []
+        bottom_block_objects = []
 
         for i in range(5):
             # Top row blocks
             top_block_id = f"top_block_{i + 1}"
-            top_block = self.add_sprite(
+            BD.add_sprite(
                 top_block_id,
                 x_positions[i],
                 top_y,
                 text=f"T{i + 1}",
-                color=(100, 150, 255)  # Light blue
+                color=(100, 150, 255)
             )
-            top_block.set_visible(True)  # Make visible
-            top_block.set_alpha(0)  # But start transparent
-            top_blocks.append(top_block_id)
+            top_block = BD.sprite_registry[top_block_id]
+            top_block.set_visible(True)
+            top_block.set_alpha(0)
+            top_block_objects.append(top_block)
 
             # Bottom row blocks
             bottom_block_id = f"bottom_block_{i + 1}"
-            bottom_block = self.add_sprite(
+            BD.add_sprite(
                 bottom_block_id,
                 x_positions[i],
                 bottom_y,
                 text=f"B{i + 1}",
-                color=(255, 150, 100)  # Light orange
+                color=(255, 150, 100)
             )
-            bottom_block.set_visible(True)  # Make visible
-            bottom_block.set_alpha(0)  # But start transparent
-            bottom_blocks.append(bottom_block_id)
+            bottom_block = BD.sprite_registry[bottom_block_id]
+            bottom_block.set_visible(True)
+            bottom_block.set_alpha(0)
+            bottom_block_objects.append(bottom_block)
 
-            # Wait a moment before starting
         self.wait(1.0)
 
-        # SIMULTANEOUS: Fade in all top blocks at once
+        # SIMULTANEOUS: Fade in all top blocks at once using animate API
         simultaneous_animations = [
-            self.fade_to(block_id, 255, duration=1.5)
-            for block_id in top_blocks
+            block.animate.fade_to(255, duration=1.5)
+            for block in top_block_objects
         ]
         self.play(simultaneous(*simultaneous_animations))
 
-        # Wait between demonstrations
         self.wait(2.0)
 
-        # SEQUENTIAL: Fade in bottom blocks one after another
+        # SEQUENTIAL: Fade in bottom blocks one after another using animate API
         sequential_animations = [
-            [self.fade_to(block_id, 255, duration=0.8)]
-            for block_id in bottom_blocks
+            [block.animate.fade_to(255, duration=0.8)]
+            for block in bottom_block_objects
         ]
         self.play(sequential(*sequential_animations))
 
-        # Final wait to see the result
         self.wait(2.0)
 
+#
 class AutoLayerDAGDemo(Scene):
     def __init__(self):
         super().__init__(resolution="480p", fps=15)
 
     def construct(self):
-        # Configuration similar to GHOSTDAGScene
-        AVG_AC = 4  # Average anticone size
-        BLOCKS = 20  # Total blocks to generate
-        MAX_BLOCKS_PER_BATCH = 3  # Max blocks per batch
-        GD_K = 2  # k parameter for GhostDAG
+        AVG_AC = 4
+        BLOCKS = 20
+        MAX_BLOCKS_PER_BATCH = 3
+        GD_K = 2
 
-        # Initialize GhostDAG with automatic layering
         GD = GhostDAG(self, k=GD_K)
 
-        # Genesis block (automatic positioning)
-        self.play(GD.add_with_ghostdag("Gen", label="G"))
+        gen_animations = GD.add_with_ghostdag("Gen", label="G")
+        self.play(gen_animations)
         self.wait(0.5)
 
-        # Adjust layers after genesis
         adjust_animations = GD.adjust_layers()
         if adjust_animations:
             self.play(adjust_animations)
 
-        blocks_remaining = BLOCKS - 1  # Subtract genesis block
+        blocks_remaining = BLOCKS - 1
         batch_number = 0
 
-        # Generate blocks in batches
         while blocks_remaining > 0:
             batch_number += 1
             batch_size = min(randint(1, MAX_BLOCKS_PER_BATCH), blocks_remaining)
@@ -427,56 +457,46 @@ class AutoLayerDAGDemo(Scene):
 
             print(f"Batch {batch_number}: Adding {batch_size} blocks")
 
-            # Get current tips for parent selection
             current_tips = GD.get_tips()
 
-            # Create batch of blocks
             batch_animations = []
             for i in range(batch_size):
                 block_id = f"L{batch_number}_{i + 1}"
 
-                # Select parents using Poisson distribution for anticone size
                 missed_blocks = poi(lam=AVG_AC)
                 selected_parents = GD.get_tips(missed_blocks=missed_blocks)
 
-                # Add block with GhostDAG algorithm
                 batch_animations.append(
                     GD.add_with_ghostdag(block_id, selected_parents, label=f"{batch_number}.{i + 1}")
                 )
 
-                # Play batch animations simultaneously
             self.play(batch_animations)
             self.wait(0.3)
 
-            # Adjust layers after each batch
             adjust_animations = GD.adjust_layers()
             if adjust_animations:
                 self.play(adjust_animations)
                 self.wait(0.2)
 
-                # Color coding based on GhostDAG classification
         self.wait(1)
 
-        # Color blue blocks (main chain)
+        # Use animate API for color changes
         if hasattr(GD, 'blue_blocks') and GD.blue_blocks:
-            blue_animations = [self.change_color(block_id, (0, 100, 255))
-                               for block_id in GD.blue_blocks]
+            blue_animations = [GD.blocks[block_id].animate.change_color((0, 100, 255))
+                               for block_id in GD.blue_blocks if block_id in GD.blocks]
             self.play(blue_animations)
             self.wait(0.5)
 
-            # Color red blocks (off main chain)
         if hasattr(GD, 'red_blocks') and GD.red_blocks:
-            red_animations = [self.change_color(block_id, (255, 100, 100))
-                              for block_id in GD.red_blocks]
+            red_animations = [GD.blocks[block_id].animate.change_color((255, 100, 100))
+                              for block_id in GD.red_blocks if block_id in GD.blocks]
             self.play(red_animations)
             self.wait(0.5)
 
-            # Final layer adjustment and tree animation
         final_adjust = GD.adjust_layers()
         if final_adjust:
             self.play(final_adjust)
 
-            # Create tree animation if available
         if hasattr(GD, 'create_tree_animation_fast'):
             print("Creating tree animations...")
             tree_animations = GD.create_tree_animation_fast()
@@ -487,7 +507,6 @@ class AutoLayerDAGDemo(Scene):
 
         self.wait(3)
 
-        # Print final statistics
         print(f"\nFinal LayerDAG Statistics:")
         if hasattr(GD, 'blue_blocks'):
             print(f"Blue blocks: {len(GD.blue_blocks)}")
@@ -496,19 +515,20 @@ class AutoLayerDAGDemo(Scene):
         if hasattr(GD, 'block_scores'):
             print(f"Block scores available: {len(GD.block_scores)}")
 
+#
 class AutoGhostDAGDemo(Scene):
     def __init__(self):
         super().__init__(resolution="480p", fps=15)
 
     def construct(self):
-        AVG_AC = 4  # Average anticone size
+        AVG_AC = 4
         BLOCKS = 20
         MAX_BLOCKS_PER_BATCH = 3
 
         GD = GhostDAG(self, k=2)
 
-        # Genesis block
-        self.play(GD.add_with_ghostdag("Gen", label="G"))
+        gen_animations = GD.add_with_ghostdag("Gen", label="G")
+        self.play(gen_animations)
 
         blocks_remaining = BLOCKS - 1
         batch_number = 0
@@ -522,38 +542,35 @@ class AutoGhostDAGDemo(Scene):
             for i in range(batch_size):
                 block_id = f"L{batch_number}_{i + 1}"
 
-                # Use Poisson distribution for missed_blocks
                 missed_blocks = poi(lam=AVG_AC)
                 selected_parents = GD.get_tips(missed_blocks=missed_blocks)
 
                 batch_animations.append(
-                    GD.add_with_ghostdag(block_id, parents = selected_parents, label=f"{batch_number}.{i + 1}")
+                    GD.add_with_ghostdag(block_id, parents=selected_parents, label=f"{batch_number}.{i + 1}")
                 )
 
             self.play(batch_animations)
 
-            # Adjust layers after each batch
             adjust_animations = GD.adjust_layers()
             if adjust_animations:
                 self.play(adjust_animations)
 
         self.wait(2)
-        # After all blocks are added, create final GHOSTDAG visualization
         final_animations = GD.create_final_ghostdag_animation()
         self.play(final_animations, run_time=5)
 
         self.wait(3)
 
 if __name__ == "__main__":
-    scene = BlockCameraDemo()
+#    scene = BlockCameraDemo() # tested since refactoring
 #    scene = BlockDAGDemo() # tested since refactoring
 #    scene = BitcoinChainDemo() # tested since refactoring
 #    scene = FiftyBlocksDemo() # tested since refactoring
-#    scene = GhostDAGDemo()
-#    scene = LayerDAGDemo()
+#    scene = GhostDAGDemo() # tested since refactoring
+    scene = LayerDAGDemo()
 #    scene = AutoLayerDAGDemo()
-#    scene = SimultaneousVsSequentialDemo() # tested since refactoring
-#    scene = AutoGhostDAGDemo() # tested since refactoring
+#    scene = SimultaneousVsSequentialDemo()
+#    scene = AutoGhostDAGDemo()
     scene.construct()
     scene.render()
 
