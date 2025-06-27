@@ -1,5 +1,5 @@
 from typing import List, Dict, Any
-from engine.animations.animations import Animation, AnimationType
+from animation.types import Animation, AnimationType
 
 class AnimationController:
     def __init__(self, fps: int = 30):
@@ -129,25 +129,22 @@ class AnimationController:
 
     # Animation Handler Methods
     def _handle_fade_in(self, animation: Animation, sprite: Any,
-                       is_complete: bool, progress: float) -> None:
+                        is_complete: bool, progress: float) -> None:
         """Handle fade-in with captured state."""
         if animation.state.actual_start_alpha is None:
-            animation.state.actual_start_alpha = sprite.alpha
-            if hasattr(sprite, '_visible') and sprite._visible == 0:
-                sprite.set_visible(True)
+            # Automatically set visible=True for fade-in animations FIRST
+            sprite.set_visible(True)
+            animation.state.actual_start_alpha = 0
+            sprite.set_alpha(0)  # Now set alpha to 0, which will trigger render() again with visible=True
 
         start_alpha = animation.state.actual_start_alpha
         target_alpha = animation.target_alpha
 
         if is_complete:
             sprite.set_alpha(target_alpha)
-            if not hasattr(sprite, '_visible'):
-                sprite.set_visible(True)
         else:
             current_alpha = int(start_alpha + (target_alpha - start_alpha) * progress)
             sprite.set_alpha(current_alpha)
-            if not hasattr(sprite, '_visible'):
-                sprite.set_visible(True)
 
     def _handle_move_to(self, animation: Animation, sprite: Any,
                        is_complete: bool, progress: float) -> None:
@@ -181,26 +178,35 @@ class AnimationController:
             sprite.set_color(current_color)
 
     def _handle_fade_to(self, animation: Animation, sprite: Any,
-                       is_complete: bool, progress: float) -> None:
+                        is_complete: bool, progress: float) -> None:
         """Handle fade-to with captured state."""
         if animation.state.actual_start_alpha is None:
             animation.state.actual_start_alpha = sprite.alpha
+            # Add visibility handling for invisible sprites fading to visible
+            if sprite.alpha == 0 and animation.target_alpha > 0 and not sprite.visible:
+                sprite.set_visible(True)
 
         start_alpha = animation.state.actual_start_alpha
         target_alpha = animation.target_alpha
 
         if is_complete:
             sprite.set_alpha(target_alpha)
+            if target_alpha == 0:
+                sprite.set_visible(False)  # Hide when fully transparent
         else:
             current_alpha = int(start_alpha + (target_alpha - start_alpha) * progress)
             sprite.set_alpha(current_alpha)
 
     def _handle_change_appearance(self, animation: Animation, sprite: Any,
-                                 is_complete: bool, progress: float) -> None:
+                                  is_complete: bool, progress: float) -> None:
         """Handle combined color and alpha change with captured state."""
         if animation.state.actual_start_alpha is None:
             animation.state.actual_start_alpha = sprite.alpha
             animation.state.actual_start_color = sprite.color
+            # Add visibility handling for invisible sprites fading to visible
+            if (animation.target_alpha is not None and
+                    sprite.alpha == 0 and animation.target_alpha > 0 and not sprite.visible):
+                sprite.set_visible(True)
 
         start_alpha = animation.state.actual_start_alpha
         start_color = animation.state.actual_start_color
@@ -210,6 +216,8 @@ class AnimationController:
         if is_complete:
             if target_alpha is not None:
                 sprite.set_alpha(target_alpha)
+                if target_alpha == 0:
+                    sprite.set_visible(False)  # Hide when fully transparent
             if target_color is not None:
                 sprite.set_color(target_color)
         else:

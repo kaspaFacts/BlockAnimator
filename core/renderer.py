@@ -33,8 +33,7 @@ class VideoRenderer:
 
         try:
             for frame_num in range(total_frames):
-                sprite_registry = self.scene.dag_instance.sprite_registry if self.scene.dag_instance else {}
-
+                sprite_registry = self.scene.dag_manager.get_sprite_registry()
                 self.scene.animation_controller.update_sprites(
                     sprite_registry, frame_num
                 )
@@ -47,11 +46,11 @@ class VideoRenderer:
                         pixel_x, pixel_y = self.scene.coords.grid_to_pixel(sprite.grid_x, sprite.grid_y)
                         sprite.set_position(pixel_x, pixel_y)
 
-                        # Update connections to follow blocks (now handled by DAG)
-                if self.scene.dag_instance:
+                # Update connections to follow blocks (now handled by DAG)
+                if self.scene.dag_manager.has_dag():
                     self._update_dag_connections()
 
-                    # Process timeline events that should trigger at this frame
+                # Process timeline events that should trigger at this frame
                 for event in self.scene.timeline_events:
                     if not event.executed and frame_num >= event.trigger_frame:
                         self._execute_timeline_event(event, frame_num / self.fps, frame_num)
@@ -89,11 +88,11 @@ class VideoRenderer:
 
     def _update_dag_connections(self):
         """Update all connection lines to follow their blocks using DAG's sprite registry."""
-        if not self.scene.dag_instance:
+        if not self.scene.dag_manager.has_dag():
             return
 
-        for sprite in self.scene.dag_instance.sprites:
-            # Check if sprite is a Connection type (you may need to import Connection class)
+        all_sprites = self.scene.dag_manager.get_all_sprites()
+        for sprite in all_sprites:
             if hasattr(sprite, 'update_line'):
                 sprite.update_line()
 
@@ -101,11 +100,11 @@ class VideoRenderer:
         """Execute a timeline event during rendering."""
         if event.event_type == 'create_sprite':
             # Timeline events for sprite creation now need to go through DAG
-            if self.scene.dag_instance:
+            if self.scene.dag_manager.has_dag():
                 sprite_id = event.kwargs['sprite_id']
                 grid_x = event.kwargs['grid_x']
                 grid_y = event.kwargs['grid_y']
-                self.scene.dag_instance.add_sprite(sprite_id, grid_x, grid_y, **event.kwargs)
+                self.scene.dag_manager.dag_instance.add_sprite(sprite_id, grid_x, grid_y, **event.kwargs)
 
         elif event.event_type == 'start_animation':
             animation = event.kwargs['animation']

@@ -1,8 +1,8 @@
 """BlockDAG helper with grid coordinates."""
 import pygame
-from engine.animations.animations import FadeInAnimation, FadeToAnimation, MoveToAnimation, ColorChangeAnimation
-from engine.sprites.block import Block, GhostdagBlock, BitcoinBlock
-from engine.sprites.line import Connection
+from animation.types import FadeInAnimation, FadeToAnimation, MoveToAnimation, ColorChangeAnimation
+from sprites.block import Block, GhostdagBlock, BitcoinBlock
+from sprites.connection import Connection
 
 class BlockDAG:
     def __init__(self, scene, history_size=20):
@@ -157,6 +157,56 @@ class BlockDAG:
         return animations
 
         # Animation helper methods moved from Scene
+
+    def create(self, block_id, grid_pos, label=None, parents=None, **kwargs):
+        """Create a block and connections without any automatic animations."""
+        grid_x, grid_y = grid_pos
+
+        sprite = self.add_sprite(
+            block_id, grid_x, grid_y,
+            text=label or block_id,
+            parents=parents,
+            **kwargs
+        )
+
+        # Store the sprite
+        self.blocks[block_id] = sprite
+        self.blocks[block_id].grid_pos = grid_pos
+
+        # Store in scene for camera targeting
+        self.scene._block_positions[block_id] = self.blocks[block_id].grid_pos
+
+        # Create parent connections WITHOUT fade-in animations
+        if parents:
+            for parent in parents:
+                parent_id = parent.parent_id if isinstance(parent, Parent) else parent
+                if parent_id in self.blocks:
+                    connection_id = f"{parent_id}_to_{block_id}"
+
+                    # Initialize connection_kwargs here
+                    connection_kwargs = {}
+                    if isinstance(parent, Parent):
+                        if parent.color:
+                            connection_kwargs['color'] = parent.color
+                        if parent.selected_parent:
+                            connection_kwargs['selected_parent'] = True
+
+                            # Set color based on whether this is the selected parent (similar to add method)
+                    if (hasattr(sprite, 'ghostdag_data') and
+                            sprite.ghostdag_data and
+                            sprite.ghostdag_data.selected_parent == parent_id):
+                        connection_kwargs['color'] = (0, 0, 255)  # Blue for selected parent
+                    else:
+                        if 'color' not in connection_kwargs:
+                            connection_kwargs['color'] = (255, 255, 255)  # White for other parents
+
+                    self.add_connection(connection_id, block_id, parent_id, **connection_kwargs)
+                    # Set connection to invisible initially
+                    if connection_id in self.sprite_registry:
+                        self.sprite_registry[connection_id].set_visible(False)
+
+        self._update_history()
+        return []
 
     def move_to(self, sprite_id, target_pos, duration=1.0):
         """Create movement animation using current sprite positions."""
@@ -426,25 +476,18 @@ class LayerDAG(BlockDAG):
         # Get fade-in animations - pass parameters explicitly
         fade_animations = super().add(block_id, pos, label=label, parents=parents, **kwargs)
 
-        # NOW update layer tracking AFTER block is added to self.blocks
+        # Update layer tracking AFTER block is added to self.blocks
         self._update_layer_structure(layer, block_id)
 
-        # Get adjustment animations - now safe because block exists
+        # Get adjustment animations
         adjustment_animations = self._auto_adjust_affected_layers(layer)
 
-        # Use sequential timing: fade first, then adjust
-        animation_groups = [fade_animations]
+        # Return animations for manual scheduling instead of auto-scheduling
+        all_animations = fade_animations[:]
         if adjustment_animations:
-            animation_groups.append(adjustment_animations)
+            all_animations.extend(adjustment_animations)
 
-            # Schedule sequential animations using the enhanced controller
-        end_frame = self.scene.animation_controller.play_sequential(animation_groups)
-
-        # Update scene timing to account for the full sequence
-        self.scene.current_frame = end_frame
-        self.scene.scene_duration_frames = max(self.scene.scene_duration_frames, end_frame)
-
-        return []  # Return empty since animations are already scheduled
+        return all_animations
 
     def _calculate_topological_layer(self, parent_names):
         """Calculate the correct topological layer ensuring all parents are in lower layers."""
@@ -561,7 +604,7 @@ class LayerDAG(BlockDAG):
                 # Update our internal tracking
                 self.blocks[block_id].grid_pos = new_pos
                 # Create animation to move the block
-                animations.append(self.scene.move_to(block_id, new_pos, duration=0.5))
+                animations.append(self.move_to(block_id, new_pos, duration=0.5))
 
         return animations
 
@@ -571,13 +614,7 @@ class LayerDAG(BlockDAG):
         for layer_index in range(len(self.layers)):
             animations.extend(self._adjust_single_layer(layer_index))
 
-            # Use simultaneous timing for manual layer adjustments
-        if animations:
-            end_frame = self.scene.animation_controller.play_simultaneous(animations)
-            self.scene.current_frame = end_frame
-            self.scene.scene_duration_frames = max(self.scene.scene_duration_frames, end_frame)
-
-        return []  # Return empty since animations are already scheduled
+        return animations  # Return for manual scheduling
 
     def rebalance_all_layers(self):
         """Manually trigger a full rebalancing of all layers"""

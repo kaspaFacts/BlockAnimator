@@ -1,7 +1,7 @@
 import pygame
 from dataclasses import dataclass
 from typing import List, Dict, Optional
-from engine.animations.block_animation_proxy import BlockAnimationProxy
+from animation.proxy import BlockAnimationProxy
 
 
 @dataclass
