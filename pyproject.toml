@@ -13,8 +13,12 @@ requires-python = ">=3.8"
 dependencies = [
     "pygame>=2.0.0",
     "opencv-python",
-    "numpy"
+    "numpy",
+    "click>=8.0"
 ]
+
+[project.scripts]
+"blockanimator" = "blockanimator.__main__:main"
 
 [build-system]
 requires = ["hatchling"]

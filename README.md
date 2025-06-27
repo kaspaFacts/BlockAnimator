@@ -104,3 +104,4 @@ Run your animation:
 python my_first_animation.py
 
 # TODO format this properly
+# TODO fix examples (only ghostdag_demo.py is properly set up to work with new manim-like cli interface)
