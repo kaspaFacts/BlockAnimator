@@ -1,7 +1,9 @@
+# BlockAnimator\blockanimator\sprites\block.py
+
 import pygame
 from dataclasses import dataclass
 from typing import List, Dict, Optional
-from animation.proxy import BlockAnimationProxy
+from blockanimator.animation import BlockAnimationProxy
 
 
 @dataclass

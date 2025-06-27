@@ -1,7 +1,8 @@
+# BlockAnimator\blockanimator\consensus\manager.py
+
 import pygame
 
-
-class DAGManager:
+class ConsensusManager:
     def __init__(self):
         self.dag_instance = None
 

@@ -1,4 +1,6 @@
-from animation.types import *
+# BlockAnimator\blockanimator\core\camera.py
+
+from blockanimator.animation import CameraMoveAnimation
 
 class CameraController:
     def __init__(self, scene):

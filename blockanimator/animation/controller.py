@@ -1,5 +1,7 @@
+# BlockAnimator\blockanimator\animation\controller.py
+
 from typing import List, Dict, Any
-from animation.types import Animation, AnimationType
+from .anim_types import Animation, AnimationType
 
 class AnimationController:
     def __init__(self, fps: int = 30):

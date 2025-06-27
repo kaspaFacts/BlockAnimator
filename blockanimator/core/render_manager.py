@@ -1,4 +1,6 @@
-from core.renderer import VideoRenderer
+# BlockAnimator\blockanimator\core\render_manager.py
+
+from .renderer import VideoRenderer
 
 
 class RenderManager:

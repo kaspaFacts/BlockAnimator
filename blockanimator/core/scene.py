@@ -1,11 +1,13 @@
-from core.coordinate_system import CoordinateSystem
-from animation.controller import AnimationController
-from animation.timeline import Timeline
-from core.camera import CameraController
-from animation.orchestrator import AnimationOrchestrator
-from consensus.manager import DAGManager
-from utils.config import DisplayConfig
-from core.render_manager import RenderManager
+# BlockAnimator\blockanimator\core\scene.py
+
+from blockanimator.animation.controller import AnimationController
+from blockanimator.animation import Timeline
+from blockanimator.animation import AnimationOrchestrator
+from ..consensus.manager import ConsensusManager
+from ..utils.config import DisplayConfig
+from .render_manager import RenderManager
+from .coordinate_system import CoordinateSystem
+from .camera import CameraController
 
 class Scene:
     def __init__(self, resolution='720p', fps=30, field_height=50):
@@ -19,7 +21,7 @@ class Scene:
         self.timeline = Timeline(fps)
         self.camera = CameraController(self)
         self.animation_orchestrator = AnimationOrchestrator(self.animation_controller, self.timeline)
-        self.dag_manager = DAGManager()
+        self.dag_manager = ConsensusManager()
         self.render_manager = RenderManager()
 
     def register_dag(self, dag_instance):

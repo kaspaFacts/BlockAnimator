@@ -1,8 +1,10 @@
+# BlockAnimator\blockanimator\demos\demo.py
+
 from random import randint
 from numpy.random import poisson as poi
-from core.scene import Scene
-from consensus.block_dag import *
-from animation.groups import *
+from ..core.scene import Scene
+from blockanimator.animation import *
+from ..consensus import BlockDAG, BitcoinDAG, GhostDAG, StyledParent
 
 class BlockDAGDemo(Scene):
     def construct(self):
@@ -18,7 +20,7 @@ class BlockDAGDemo(Scene):
         x_block = BD.blocks["X"]
 
         y_block_animations = BD.add("Y", (30, 35), label=":)",
-                                    parents=["Gen", Parent("X", color=(0, 255, 0))],
+                                    parents=["Gen", StyledParent("X", color=(0, 255, 0))],
                                     consensus_type="ghostdag")
         self.play(y_block_animations)
         y_block = BD.blocks["Y"]
@@ -408,7 +410,7 @@ class GhostDAGDemo(Scene):
         self.wait(1)
 
         e_animations = GD.add("E", (70, 25),
-                              parents=["C", Parent("D", color=(0, 255, 0))],
+                              parents=["C", StyledParent("D", color=(0, 255, 0))],
                               label="E")
         self.play(e_animations)
         e_block = GD.blocks["E"]
@@ -555,7 +557,7 @@ class AutoGhostDAGDemo(Scene):
         self.wait(3)
 
 if __name__ == "__main__":
-    scene = BlockDAGDemo()
+#    scene = BlockDAGDemo()
 #    scene = BlockCameraDemo()
 #    scene = BitcoinChainDemo()
 #    scene = FiftyBlocksDemo()
@@ -563,11 +565,8 @@ if __name__ == "__main__":
 #    scene = AutoLayerDAGDemo()
 #    scene = GhostDAGDemo()
 #    scene = SimultaneousVsSequentialDemo() # Currently does not work using new create method(trying to set visibility in animations)
-#    scene = AutoGhostDAGDemo()
+    scene = AutoGhostDAGDemo()
     scene.construct()
     scene.render()
 
 # Ignore the additional labels for now, they have been used for debugging
-
-# TODO there is a way to create a living package from a project to use the project as an import, but I was unable to
-#      implement this successfully so far.

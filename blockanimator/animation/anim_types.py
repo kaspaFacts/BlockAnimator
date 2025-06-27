@@ -1,3 +1,5 @@
+# BlockAnimator\blockanimator\animation\anim_types.py
+
 from dataclasses import dataclass, field
 from typing import Optional, Any
 from enum import Enum

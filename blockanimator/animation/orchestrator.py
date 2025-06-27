@@ -1,4 +1,6 @@
-from animation.types import WaitAnimation
+# BlockAnimator\blockanimator\animation\orchestrator.py
+
+from .anim_types import WaitAnimation
 
 
 class AnimationOrchestrator:

@@ -1,0 +1,26 @@
+# BlockAnimator\pyproject.toml
+
+[project]
+name = "blockanimator"
+version = "0.1.0"
+description = "Blockchain DAG visualization and animation engine"
+authors = [
+    {name = "KaspaFacts", email = "none.email@none.com"}
+]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "pygame>=2.0.0",
+    "opencv-python",
+    "numpy"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+include = [
+    "/blockanimator"
+]

@@ -1,4 +1,6 @@
-from animation.groups import TimelineEvent
+# BlockAnimator\blockanimator\animation\timeline.py
+
+from .groups import TimelineEvent
 
 
 class Timeline:

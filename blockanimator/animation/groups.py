@@ -1,3 +1,5 @@
+# BlockAnimator\blockanimator\animation\groups.py
+
 class TimelineEvent:
     def __init__(self, trigger_frame, event_type, **kwargs):
         self.trigger_frame = trigger_frame

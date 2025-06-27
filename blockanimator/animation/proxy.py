@@ -1,5 +1,6 @@
-# engine/animations/proxy.py
-from animation.types import MoveToAnimation, FadeToAnimation, ColorChangeAnimation
+# BlockAnimator\blockanimator\animation\proxy.py
+
+from .anim_types import MoveToAnimation, FadeToAnimation, ColorChangeAnimation
 
 
 class BlockAnimationProxy:

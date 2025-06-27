@@ -1,3 +1,5 @@
+# BlockAnimator\blockanimator\core\coordinate_system.py
+
 class CoordinateSystem:
     """Converts grid coordinates to screen pixels with camera support."""
 
