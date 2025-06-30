@@ -192,6 +192,15 @@ class Connection(pygame.sprite.DirtySprite):
         # Draw arrow head    
         pygame.draw.polygon(surface, self.color, [end, p1, p2])
 
+    def on_alpha_change(self, new_alpha):
+        """Called when the start block's alpha changes."""
+        self.set_alpha(new_alpha)
+
+    def cleanup(self):
+        """Remove this connection from its start block's observers."""
+        if self in self.start_block.alpha_observers:
+            self.start_block.alpha_observers.remove(self)
+
     def update_as_arrow(self, arrow_length=10):
         """Update the connection as an arrow instead of a line."""
         if not (self.start_block and self.end_block):

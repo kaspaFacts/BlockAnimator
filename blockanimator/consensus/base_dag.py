@@ -80,6 +80,7 @@ class BlockDAG:
 
         connection = Connection(start_block, end_block, sprite_id=connection_id, grid_size=self.scene.coords.grid_size,
                                 **kwargs)
+        start_block.alpha_observers.append(connection)
         self.sprite_registry[connection_id] = connection
 
         layer = self.SELECTED_CONNECTION_LAYER if kwargs.get('selected_parent', False) else self.CONNECTION_LAYER
