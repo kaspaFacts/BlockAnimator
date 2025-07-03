@@ -5,6 +5,9 @@ from random import randint
 from numpy.random import poisson as poi
 
 from blockanimator import *
+from blockanimator.consensus import LogicalDAG
+from blockanimator.consensus.visual_block import VisualBlock
+
 
 # Stress Test with 50 blocks, multiple parents per block, movement, movement while color and opacity changes
 # set Resolution and FPS to see how fast rendering is on your computer, mp4 output is 61 seconds.
@@ -403,6 +406,145 @@ class BitcoinChainDemo(Scene):
             )
 
         self.play(*fade_animations)
+        self.wait(1)
+
+# working to separate blocks from visual representation, blocks and dags are getting too crowded
+class BitcoinHiddenForkDemo(Scene):
+    def __init__(self):
+        super().__init__(resolution="720p", fps=30)
+
+    def construct(self):
+        # Phase 1: Create logical DAG with Bitcoin consensus
+        logical_dag = LogicalDAG(consensus_type="bitcoin")
+
+        # Create all logical blocks first (including hidden fork)
+        # This separates consensus logic from visual rendering
+
+        # Build main chain logically
+        logical_dag.add_logical_block("Genesis")
+        for i in range(1, 6):  # Blocks 1-5
+            parent = "Genesis" if i == 1 else f"Block_{i - 1}"
+            logical_dag.add_logical_block(f"Block_{i}", [parent])
+
+            # Create hidden fork logically from Block_2
+        fork_blocks = logical_dag.create_fork_from_point("Block_2", ["Fork_1", "Fork_2", "Fork_3"])
+
+        # Validate logical structure
+        if logical_dag.validate_dag_integrity():
+            print("✓ Logical DAG integrity validated")
+
+            # Phase 2: Visual rendering in creation order
+        genesis_pos = (10, 25)
+        block_spacing = 32  # 4 * 8 grid units
+
+        # Render main chain blocks visually
+        main_chain_blocks = ["Genesis", "Block_1", "Block_2", "Block_3", "Block_4", "Block_5"]
+        visual_blocks = {}
+
+        for i, block_id in enumerate(main_chain_blocks):
+            logical_block = logical_dag.get_block(block_id)
+            pos = (genesis_pos[0] + i * block_spacing, genesis_pos[1])
+
+            # Create visual representation
+            visual_block = VisualBlock(
+                pos[0], pos[1],
+                logical_block,
+                self.coords.grid_size,
+                color=(255, 165, 0)  # Bitcoin orange
+            )
+
+            visual_blocks[block_id] = visual_block
+            self.sprite_registry[block_id] = visual_block
+            self.sprites.add(visual_block, layer=self.BLOCK_LAYER)
+
+            # Animate block appearance
+            self.play(self.fade_to(block_id, 255, duration=0.5))
+            self.wait(0.3)
+
+            # Phase 3: Render hidden fork at 50% opacity
+        hidden_animations = []
+
+        for i, fork_block in enumerate(fork_blocks):
+            logical_block = logical_dag.get_block(fork_block.block_id)
+            # Position above main chain
+            pos = (genesis_pos[0] + (i + 3) * block_spacing, genesis_pos[1] + 60)
+
+            visual_block = VisualBlock(
+                pos[0], pos[1],
+                logical_block,
+                self.coords.grid_size,
+                color=(255, 165, 0)
+            )
+
+            visual_blocks[fork_block.block_id] = visual_block
+            self.sprite_registry[fork_block.block_id] = visual_block
+            self.sprites.add(visual_block, layer=self.BLOCK_LAYER)
+
+            # Start hidden (50% opacity)
+            hidden_animations.append(self.fade_to(fork_block.block_id, 127, duration=0.1))
+
+        self.play(hidden_animations)
+        self.wait(1)
+
+        print(f"Main chain length: {logical_dag.get_chain_length()}")
+        print(f"Current tip: {logical_dag.get_chain_tip()}")
+
+        # Phase 4: Dramatic fork revelation and reorganization
+        reveal_animations = []
+
+        # Fade hidden fork to full opacity
+        for fork_block in fork_blocks:
+            reveal_animations.append(
+                self.change_appearance(fork_block.block_id, target_alpha=255, duration=2.0)
+            )
+
+            # Move hidden fork to main chain position
+        for i, fork_block in enumerate(fork_blocks):
+            new_x = genesis_pos[0] + (i + 3) * block_spacing
+            new_pos = (new_x, genesis_pos[1])
+            reveal_animations.append(
+                self.move_to(fork_block.block_id, new_pos, duration=2.0)
+            )
+
+            # Move orphaned honest blocks down
+        orphaned_blocks = ["Block_3", "Block_4", "Block_5"]
+        orphan_y = genesis_pos[1] - 60
+
+        for block_id in orphaned_blocks:
+            current_visual = visual_blocks[block_id]
+            orphan_pos = (current_visual.x, orphan_y)
+            reveal_animations.append(
+                self.move_to(block_id, orphan_pos, duration=2.0)
+            )
+            # Fade to show orphaned status
+            reveal_animations.append(
+                self.change_appearance(block_id, target_alpha=128, target_color=(255, 100, 100), duration=2.0)
+            )
+
+            # Execute all reveal animations simultaneously
+        self.play(reveal_animations)
+        self.wait(2)
+
+        # Phase 5: Update logical chain and highlight new main chain
+        new_main_chain = ["Genesis", "Block_1", "Block_2", "Fork_1", "Fork_2", "Fork_3"]
+        logical_dag.reorganize_chain(new_main_chain)
+
+        # Highlight new main chain
+        highlight_animations = []
+        for block_id in new_main_chain:
+            highlight_animations.append(
+                self.change_appearance(block_id, target_color=(0, 255, 0), duration=1.0)
+            )
+
+        self.play(highlight_animations)
+        self.wait(2)
+
+        # Display final statistics
+        stats = logical_dag.get_statistics()
+        print(f"✓ Fork revealed! New main chain: {stats['chain_tip']}")
+        print(f"✓ Chain length: {stats['chain_length']}")
+        print(f"✗ Orphaned blocks: {orphaned_blocks}")
+
         self.wait(1)
 
 class BlockDAGDemo(Scene):

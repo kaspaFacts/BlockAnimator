@@ -16,6 +16,7 @@ from .layer_dag import LayerDAG
 from .ghostdag_dag import GhostDAG
 from .manager import ConsensusManager
 from .constants import LayerConstants, AnimationConstants
+from .logical_block import LogicalBlock, LogicalBitcoinBlock, LogicalDAG, LogicalGhostdagBlock, GhostdagAlgorithm, GhostdagData
 
 __all__ = [
     # Core DAG classes
@@ -30,5 +31,13 @@ __all__ = [
 
     # Constants
     'LayerConstants',
-    'AnimationConstants'
+    'AnimationConstants',
+
+    # New Abstractions
+    'LogicalBlock',
+    'LogicalBitcoinBlock',
+    'LogicalDAG',
+    'LogicalGhostdagBlock',
+    'GhostdagAlgorithm',
+    'GhostdagData'
 ]

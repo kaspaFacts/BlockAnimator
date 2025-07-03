@@ -1,0 +1,207 @@
+Adding a New Consensus DAG Type
+
+The consensus\dags directory contains everything needed to create DAGs using any consensus protocol. Consensus DAGs are built using the DAG factory pattern with a protocol-based interface, following the same architectural patterns established for consensus blocks.
+Overview
+
+The consensus DAG system uses:
+
+    Protocol Interface: defines the common interface
+    Factory Pattern: handles creation
+    Builder Pattern: Provides fluent interface for DAG configuration
+    Positioning Strategies: Consensus-specific block positioning logic
+
+Step-by-Step Guide
+1. Create Your Consensus DAG Directory
+
+Follow the established pattern by creating a new directory for your consensus type:
+
+blockanimator/consensus/dags/
+├── your_consensus/
+│   ├── your_consensus_dag.py      # Main DAG implementation
+│   ├── your_consensus_positioning.py  # Optional: positioning strategy
+│   └── your_consensus_algorithm.py    # Optional: separate algorithm logic
+
+2. Implement the Consensus DAG
+
+Create your DAG implementation following the protocol:
+
+# blockanimator/consensus/dags/your_consensus/your_consensus_dag.py
+from typing import Dict, List, Optional, Tuple, Any
+from ..dag_protocol import ConsensusDAG
+from ...blocks.consensus_block import ConsensusBlock, ConsensusBlockBuilder
+
+class YourConsensusDAG:
+    """Your consensus-specific DAG implementation."""
+
+    def __init__(self, consensus_type: str, **kwargs):
+        self.consensus_type = consensus_type
+        self.logical_blocks: Dict[str, ConsensusBlock] = {}
+        self.creation_order: List[str] = []
+
+        # Your consensus-specific tracking
+        self.consensus_specific_data = {}
+        self.config = kwargs
+
+    def add_logical_block(self, block_id: str, parents: List[str] = None, **kwargs) -> ConsensusBlock:
+        """Add a logical block to your consensus DAG."""
+        if block_id in self.logical_blocks:
+            raise ValueError(f"Block {block_id} already exists")
+
+        # Create block using builder pattern
+        block = (ConsensusBlockBuilder.create(self.consensus_type, block_id)
+                .with_parents(parents)
+                .with_metadata(**kwargs)
+                .build())
+
+        # Validate and store
+        if not block.validate_parents(self.logical_blocks):
+            raise ValueError(f"Invalid parents for block {block_id}")
+
+        block.creation_order = len(self.creation_order)
+        self.logical_blocks[block_id] = block
+        self.creation_order.append(block_id)
+
+        # Calculate consensus data
+        block.calculate_consensus_data(self.config.get('k', 3), self.logical_blocks)
+
+        return block
+
+    def calculate_block_position(self, block: ConsensusBlock) -> Tuple[float, float]:
+        """Calculate position based on your consensus rules."""
+        # Implement your positioning logic here
+        if block.is_genesis():
+            return (10.0, 25.0)
+
+        # Your consensus-specific positioning
+        return (10.0, 25.0)
+
+    def get_tips(self) -> List[str]:
+        """Get current tip blocks according to your consensus."""
+        # Implement your tip selection logic
+        tips = []
+        for block_id in self.logical_blocks:
+            has_children = False
+            for other_id, other_block in self.logical_blocks.items():
+                if other_id != block_id and block_id in other_block.parents:
+                    has_children = True
+                    break
+            if not has_children:
+                tips.append(block_id)
+        return tips
+
+    def validate_dag_integrity(self) -> bool:
+        """Validate DAG structure according to your consensus rules."""
+        # Implement your validation logic
+        for block_id, block in self.logical_blocks.items():
+            if not block.validate_parents(self.logical_blocks):
+                return False
+        return True
+
+    # Protocol compliance methods
+    def get_block_count(self) -> int:
+        return len(self.logical_blocks)
+
+    def get_block(self, block_id: str) -> Optional[ConsensusBlock]:
+        return self.logical_blocks.get(block_id)
+
+    def get_blocks_in_creation_order(self) -> List[ConsensusBlock]:
+        return [self.logical_blocks[block_id] for block_id in self.creation_order]
+
+3. Register in DAG Factory
+
+Update the factory to recognize your new consensus DAG type:
+
+Add your consensus type to the _DAG_TYPES mapping in :
+
+_DAG_TYPES = {
+    "bitcoin": ("nakamoto_consensus.bitcoin_dag", "BitcoinDAG"),
+    "ghostdag": ("ghostdag.ghostdag_dag", "GhostdagDAG"),
+    "your_consensus": ("your_consensus.your_consensus_dag", "YourConsensusDAG"),  # Add this line
+}
+
+4. Usage Examples
+
+With the builder pattern, creating DAGs is uniform across all consensus types:
+
+# Create using builder pattern
+dag = (DAGBuilder.create("your_consensus")
+       .with_k_parameter(5)  # If your consensus uses k-parameter
+       .with_config(custom_param=True)
+       .build())
+
+# Or using factory directly
+dag = DAGFactory.create_dag("your_consensus", k=5, custom_param=True)
+
+# Add blocks to your DAG
+block = dag.add_logical_block("block_1", ["parent_1", "parent_2"], label="Test Block")
+
+Key Implementation Notes
+Protocol Compliance
+
+Your DAG must implement all protocol methods:
+
+    add_logical_block(): Core block addition logic
+    calculate_block_position(): Visual positioning strategy
+    get_tips(): Tip selection according to your consensus
+    validate_dag_integrity(): DAG structure validation
+
+Parent Handling
+
+The builder pattern automatically handles different parent requirements:
+
+    Single parent (Bitcoin): Linear chain structure
+    Multiple parents (GHOSTDAG): DAG structure with multiple tips
+    Custom rules (Your consensus): Implement your own validation
+
+Positioning Strategy
+
+Consider creating a separate positioning class for complex positioning logic:
+
+# blockanimator/consensus/dags/your_consensus/your_consensus_positioning.py
+class YourConsensusPositioning:
+    def calculate_position(self, block: ConsensusBlock, dag_context: Dict[str, ConsensusBlock]) -> Tuple[float, float]:
+        # Your positioning algorithm
+        pass
+
+Integration with Blocks
+
+Your DAG should work seamlessly with your consensus block implementation. Ensure your block type is registered in the block factory at .
+Testing Your Implementation
+
+    Unit Tests: Test your consensus logic in isolation
+    Integration Tests: Test with the factory and builder
+    Visual Tests: Verify block positioning renders correctly
+    Performance Tests: Test with large DAGs if applicable
+
+Examples from Existing Implementations
+
+    GHOSTDAG: shows complex multi-parent DAG with blue/red classification
+    Bitcoin: shows simple linear chain with height tracking
+
+Directory Structure Best Practices
+
+Follow the established pattern:
+
+consensus/dags/
+├── your_consensus/
+│   ├── your_consensus_dag.py           # Main DAG implementation
+│   ├── your_consensus_positioning.py  # Positioning strategy (optional)
+│   ├── your_consensus_validator.py    # Validation logic (optional)
+│   └── your_consensus_algorithm.py    # Core algorithm (optional)
+
+Integration with Visual System
+
+Your DAG will automatically work with the visual system through the positioning strategy. The visual layer will:
+
+    Create logical blocks first using your DAG
+    Calculate positions using your calculate_block_position() method
+    Create visual representations in the determined order
+    Handle animations and rendering
+
+The protocol-based design ensures your implementation will work seamlessly with the existing visual and animation systems without requiring changes to the core framework.
+Notes
+
+    Your DAG implementation should focus purely on logical structure and consensus rules
+    Visual positioning should be deterministic and based on consensus data
+    Consider network simulation features like missed blocks for realistic testing
+    Maintain compatibility with the builder pattern for consistent API usage

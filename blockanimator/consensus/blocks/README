@@ -1,0 +1,134 @@
+# BlockAnimator\blockanimator\consensus\blocks\README
+
+Adding a New Consensus Type
+
+The consensus\blocks directory contains everything needed to create blocks using any consensus protocol
+Consensus blocks are built using the block factory pattern with a protocol-based interface.
+
+Overview
+
+The consensus system uses:
+
+    Protocol Interface: defines the common interface
+    Factory Pattern: handles creation
+    Builder Pattern: provides fluent interface
+
+Step-by-Step Guide
+1. Create Your Consensus Data Structure
+
+First, define the consensus-specific data your algorithm needs:
+
+# blockanimator/consensus/blocks/your_consensus/your_consensus_data.py
+from dataclasses import dataclass
+from typing import Optional, List
+
+@dataclass
+class YourConsensusData:
+    """Your consensus-specific data structure"""
+    consensus_score: int = 0
+    special_field: Optional[str] = None
+    # Add fields specific to your consensus algorithm
+
+2. Implement the Consensus Block
+
+Create your consensus block implementation following the protocol:
+
+# blockanimator/consensus/blocks/your_consensus/your_consensus_block.py
+from typing import List, Dict, Optional
+from ..consensus_block import ConsensusBlock
+from .your_consensus_data import YourConsensusData
+
+class YourConsensusBlock:
+    """Your consensus block implementation"""
+
+    def __init__(self, block_id: str, parents: List[str] = None, **kwargs):
+        self.block_id = block_id
+        self.parents = parents or []
+        self.consensus_type = "your_consensus"
+        self.creation_order: Optional[int] = None
+        self.consensus_data = YourConsensusData()
+        self.metadata = kwargs
+
+    def calculate_consensus_data(self, k: int, dag_context: Dict[str, ConsensusBlock]) -> None:
+        """Implement your consensus algorithm here"""
+        # Your consensus calculation logic
+        pass
+
+    def validate_parents(self, dag_context: Dict[str, ConsensusBlock]) -> bool:
+        """Validate parent relationships according to your consensus rules"""
+        # Your validation logic (e.g., parent count limits)
+        return True
+
+    def get_display_info(self) -> str:
+        """Get display text for visual representation"""
+        return f"{self.block_id}\nScore:{self.consensus_data.consensus_score}"
+
+3. Register in Factory
+
+Update the factory to recognize your new consensus type:
+
+Add your consensus type to the _BLOCK_TYPES mapping:
+
+_BLOCK_TYPES = {
+    "bitcoin": ("bitcoin_block", "BitcoinBlock"),
+    "ghostdag": ("ghostdag.ghostdag_block", "GhostdagBlock"),
+    "your_consensus": ("your_consensus.your_consensus_block", "YourConsensusBlock"),  # Add this line
+}
+
+4. Usage Examples
+
+With the builder pattern, creating blocks is uniform across all consensus types:
+
+# Create using builder pattern
+block = (ConsensusBlockBuilder.create("your_consensus", "block_1")
+         .with_parents(["parent_1", "parent_2"])  # Handles any parent structure
+         .with_metadata(label="Test Block")
+         .build())
+
+# Or using factory directly
+block = ConsensusBlockFactory.create_block(
+    "your_consensus",
+    "block_1",
+    ["parent_1", "parent_2"],
+    label="Test Block"
+)
+
+Key Implementation Notes
+Parent Handling
+
+The builder pattern automatically handles different parent requirements:
+
+    Single parent (Bitcoin): Pass a string
+    Multiple parents (GHOSTDAG): Pass a list
+    No parents (Genesis): Pass None or empty list
+
+Protocol Compliance
+
+Your block must implement all protocol methods:
+
+    calculate_consensus_data(): Core consensus algorithm
+    validate_parents(): Parent relationship validation
+    get_display_info(): Visual representation text
+
+Directory Structure
+
+Follow the established pattern:
+
+consensus/blocks/
+├── your_consensus/
+│   ├── your_consensus_block.py
+│   ├── your_consensus_data.py
+│   └── your_consensus_algorithm.py  # Optional: separate algorithm logic
+
+Testing Your Implementation
+
+    Unit Tests: Test your consensus logic in isolation
+    Integration Tests: Test with the factory and builder
+    Visual Tests: Verify display information renders correctly
+
+Examples from Existing Implementations
+
+    GHOSTDAG: shows complex multi-parent consensus
+    Bitcoin: Simple single-parent chain consensus (referenced in factory)
+
+The protocol-based design ensures your implementation will work seamlessly with the existing visual and DAG systems without requiring changes to the core framework.
