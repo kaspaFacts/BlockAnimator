@@ -36,6 +36,9 @@ class GhostdagBlock:
         self.consensus_data = GhostdagData(hash=block_id)
         self.metadata = kwargs
 
+    def is_genesis(self) -> bool:
+        return len(self.parents) == 0
+
     def calculate_consensus_data(self, k: int, dag_context: Dict[str, ConsensusBlock]) -> None:
         """Calculate GHOSTDAG consensus data"""
         # Find selected parent (highest blue score, hash as tiebreaker)

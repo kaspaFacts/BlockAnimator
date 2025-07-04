@@ -7,6 +7,7 @@ from numpy.random import poisson as poi
 from blockanimator import *
 from blockanimator.consensus import LogicalDAG
 from blockanimator.consensus.visual_block import VisualBlock
+from blockanimator.rendering.consensus_scene_adapter import ConsensusSceneAdapter
 
 
 # Stress Test with 50 blocks, multiple parents per block, movement, movement while color and opacity changes
@@ -546,6 +547,146 @@ class BitcoinHiddenForkDemo(Scene):
         print(f"✗ Orphaned blocks: {orphaned_blocks}")
 
         self.wait(1)
+
+# begin testing new abstracted blocks/dags
+class NewConsensusDemo(Scene):
+    def construct(self):
+        # Test Bitcoin DAG
+        bitcoin_dag = ConsensusSceneAdapter(self, "bitcoin")
+
+        # Add some blocks
+        genesis_anims = bitcoin_dag.add("Genesis", parents=None)
+        self.play(genesis_anims)
+
+        block_a_anims = bitcoin_dag.add("A", parents=["Genesis"])
+        self.play(block_a_anims)
+
+        self.wait(2)
+
+# Testing new abstraction
+class BitcoinChainTest(Scene):
+    def construct(self):
+        dag = ConsensusSceneAdapter(self, "bitcoin")
+
+        genesis_anims = dag.add("Genesis", parents=None)
+        self.play(genesis_anims)
+
+        block_a_anims = dag.add("A", parents=["Genesis"])
+        self.play(block_a_anims)
+
+        block_b_anims = dag.add("B", parents=["A"])
+        self.play(block_b_anims)
+
+# Testing new abstraction
+class GhostdagTest(Scene):
+    def construct(self):
+        dag = ConsensusSceneAdapter(self, "ghostdag", k=3)
+
+        genesis_anims = dag.add("Genesis", parents=None)
+        self.play(genesis_anims)
+
+        # Multi-parent structure
+        a_anims = dag.add("A", parents=["Genesis"])
+        b_anims = dag.add("B", parents=["Genesis"])
+        self.play(a_anims, b_anims)
+
+        c_anims = dag.add("C", parents=["A", "B"])
+        self.play(c_anims)
+
+# Testing new abstraction
+class ExtendedGhostdagDemo(Scene):
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
+
+    def construct(self):
+        # Add 1 second wait before starting
+        self.wait(1)
+
+        # Create GHOSTDAG with k=3 parameter
+        dag = ConsensusSceneAdapter(self, "ghostdag", k=3)
+
+        # Genesis block
+        genesis_anims = dag.add("Genesis", parents=None)
+        self.play(genesis_anims)
+        self.wait(0.5)
+
+        # Layer 1: Two blocks from genesis
+        a_anims = dag.add("A", parents=["Genesis"])
+        b_anims = dag.add("B", parents=["Genesis"])
+        self.play(a_anims)
+        self.wait(0.3)
+        self.play(b_anims)
+        self.wait(0.5)
+
+        # Layer 2: Multi-parent blocks
+        c_anims = dag.add("C", parents=["A", "B"])  # Merge A and B
+        self.play(c_anims)
+        self.wait(0.3)
+
+        d_anims = dag.add("D", parents=["A"])  # Single parent from A
+        e_anims = dag.add("E", parents=["B"])  # Single parent from B
+        self.play(d_anims)
+        self.wait(0.2)
+        self.play(e_anims)
+        self.wait(0.5)
+
+        # Layer 3: More complex relationships
+        f_anims = dag.add("F", parents=["C", "D"])  # Multi-parent
+        g_anims = dag.add("G", parents=["C", "E"])  # Multi-parent
+        h_anims = dag.add("H", parents=["D", "E"])  # Multi-parent
+        self.play(f_anims)
+        self.wait(0.2)
+        self.play(g_anims)
+        self.wait(0.2)
+        self.play(h_anims)
+        self.wait(0.5)
+
+        # Layer 4: Single and multi-parent mix
+        i_anims = dag.add("I", parents=["F"])
+        j_anims = dag.add("J", parents=["G", "H"])
+        k_anims = dag.add("K", parents=["F", "G", "H"])  # Three parents
+        self.play(i_anims)
+        self.wait(0.2)
+        self.play(j_anims)
+        self.wait(0.2)
+        self.play(k_anims)
+        self.wait(0.5)
+
+        # Layer 5: Testing layer adjustment with multiple blocks
+        l_anims = dag.add("L", parents=["I", "J"])
+        m_anims = dag.add("M", parents=["J", "K"])
+        n_anims = dag.add("N", parents=["I", "K"])
+        o_anims = dag.add("O", parents=["I"])  # Single parent
+        self.play(l_anims)
+        self.wait(0.2)
+        self.play(m_anims)
+        self.wait(0.2)
+        self.play(n_anims)
+        self.wait(0.2)
+        self.play(o_anims)
+        self.wait(0.5)
+
+        # Layer 6: Final layer with complex merges
+        p_anims = dag.add("P", parents=["L", "M", "N"])  # Three parents
+        q_anims = dag.add("Q", parents=["M", "O"])
+        r_anims = dag.add("R", parents=["N", "O"])
+        s_anims = dag.add("S", parents=["L"])  # Single parent
+        self.play(p_anims)
+        self.wait(0.2)
+        self.play(q_anims)
+        self.wait(0.2)
+        self.play(r_anims)
+        self.wait(0.2)
+        self.play(s_anims)
+        self.wait(0.5)
+
+        # Final tip blocks
+        t_anims = dag.add("T", parents=["P", "Q", "R", "S"])  # Four parents - ultimate merge
+        self.play(t_anims)
+        self.wait(1)
+
+        # Final pause to observe the complete DAG
+        self.wait(3)
 
 class BlockDAGDemo(Scene):
     def construct(self):

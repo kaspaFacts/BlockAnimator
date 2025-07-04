@@ -1,6 +1,9 @@
 # BlockAnimator\blockanimator\consensus\dags\ghostdag\ghostdag_dag.py
 
 from typing import Dict, List, Optional, Tuple, Any
+
+from ... import AnimationConstants
+from ....animation import Animation, MoveToAnimation
 from ..consensus_dags import ConsensusDAG
 from ...blocks.consensus_block import ConsensusBlock, ConsensusBlockBuilder
 from ...blocks.ghostdag.ghostdag_block import GhostdagBlock
@@ -51,6 +54,23 @@ class GhostdagDAG:
         # Update GHOSTDAG-specific tracking
         self._update_ghostdag_classification(block)
 
+        # Track which layers are affected for repositioning
+        affected_layers = set()
+
+        # Current block's layer is affected
+        current_layer = self._calculate_topological_layer(block)
+        affected_layers.add(current_layer)
+
+        # Parent layers might also be affected if they have multiple blocks
+        for parent_id in block.parents:
+            if parent_id in self.logical_blocks:
+                parent_layer = self._calculate_topological_layer(self.logical_blocks[parent_id])
+                if len(self._get_blocks_in_layer(parent_layer)) > 1:
+                    affected_layers.add(parent_layer)
+
+                    # Store affected layers for the visual renderer to use
+        block.metadata['affected_layers'] = affected_layers
+
         return block
 
     def _update_ghostdag_classification(self, block: ConsensusBlock) -> None:
@@ -64,27 +84,54 @@ class GhostdagDAG:
                 self.red_blocks.remove(block.block_id)
 
     def calculate_block_position(self, block: ConsensusBlock) -> Tuple[float, float]:
-        """Calculate position based on GHOSTDAG data and topological layer."""
         if block.is_genesis():
             return (10.0, 25.0)
 
-            # Calculate topological layer
         layer = self._calculate_topological_layer(block)
 
-        # Position based on blue score and layer
-        blue_score = getattr(block.consensus_data, 'blue_score', 0)
+        # Get existing blocks in this layer (in creation order) - excluding current block
+        layer_blocks = [bid for bid in self.creation_order
+                        if bid in self.logical_blocks and
+                        bid != block.block_id and
+                        self._calculate_topological_layer(self.logical_blocks[bid]) == layer]
 
-        # Base positioning
-        x = 10.0 + (layer * 20.0)  # 20 units spacing between layers
-        y = 25.0 + (blue_score * 3.0)  # Spread vertically by blue score
-
-        # Add some variation for blocks in the same layer
-        layer_blocks = self._get_blocks_in_layer(layer)
-        if len(layer_blocks) > 1:
-            block_index = sorted(layer_blocks).index(block.block_id)
-            y += (block_index - len(layer_blocks) / 2) * 10.0
+        # Position based on layer and order within layer - using constants
+        x = 10.0 + (layer * AnimationConstants.BLOCK_SPACING * 3)  # Multiply by 3 for reasonable spacing
+        y = 25.0 + (len(layer_blocks) * 15.0)
 
         return (x, y)
+
+    def _adjust_layer_positions(self, affected_layers: set) -> List[Animation]:
+        """Create animations to reposition blocks in affected layers for better visual balance."""
+        animations = []
+
+        for layer in affected_layers:
+            layer_blocks = self._get_blocks_in_layer(layer)
+            if len(layer_blocks) <= 1:
+                continue
+
+                # Calculate balanced Y positions for this layer (keep X unchanged)
+            base_y = 25.0
+
+            # Distribute blocks evenly around the base Y position
+            total_height = (len(layer_blocks) - 1) * 15.0
+            start_y = base_y - (total_height / 2)
+
+            for i, block_id in enumerate(sorted(layer_blocks)):
+                new_y = start_y + (i * 15.0)
+
+                # Use the layer's base X position directly, don't recalculate per block
+                current_x = 10.0 + (layer * AnimationConstants.BLOCK_SPACING * 3)
+
+                # Create move animation for this block (preserve X, only change Y)
+                animations.append(MoveToAnimation(
+                    sprite_id=block_id,
+                    target_grid_x=current_x,  # Use layer's X position
+                    target_grid_y=new_y,  # Only adjust Y position
+                    duration=0.5
+                ))
+
+        return animations
 
     def _calculate_topological_layer(self, block: ConsensusBlock) -> int:
         """Calculate topological layer for positioning."""

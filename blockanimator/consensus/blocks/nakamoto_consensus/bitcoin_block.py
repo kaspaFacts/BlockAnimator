@@ -32,6 +32,9 @@ class BitcoinBlock:
         self.consensus_data = BitcoinData(parent=parent)
         self.metadata = kwargs
 
+    def is_genesis(self) -> bool:
+        return len(self.parents) == 0
+
     def calculate_consensus_data(self, k: int, dag_context: Dict[str, ConsensusBlock]) -> None:
         """Calculate Bitcoin consensus data (height and cumulative work)"""
         if not self.parents:

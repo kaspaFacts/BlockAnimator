@@ -1,8 +1,11 @@
 # BlockAnimator
 Create Animations using PyGame and Output to MP4 using OpenCV
 
-Currently broken(in the process of rewriting for ease of adding additional consensus methods)
-using pygame to build animations and output to mp4 using OpenCV
+Currently broken(in the process of rewriting for ease of adding additional consensus methods, 
+when complete, will only require adding consensus methods within blockanimator\consensus dir.)
+
+Since writing this README cli interface has been added to run demos from terminal with the ability to override settings.
+(Incomplete for rewrite)
 
 To run a demo, check what demo will be run at the bottom of demo.py, comment out any you do not wish to run, then run demo.py directly(in pycharm, right-click on demo.py and "Run"), a new mp4 video will be generated in the same folder next to demo.py
 

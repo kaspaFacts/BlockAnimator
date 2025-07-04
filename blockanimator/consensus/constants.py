@@ -10,5 +10,5 @@ class LayerConstants:
 class AnimationConstants:
     DEFAULT_DURATION = 1.0
     FADE_OUT_DELAY = 3.0
-    MERGESET_BASE_OFFSET_Y = 8
-    BLOCK_SPACING = 6
+    MERGESET_BASE_OFFSET_Y = 3
+    BLOCK_SPACING = 3
