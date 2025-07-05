@@ -88,16 +88,34 @@ class GhostdagDAG:
             return (10.0, 25.0)
 
         layer = self._calculate_topological_layer(block)
+        x = 10.0 + (layer * AnimationConstants.BLOCK_SPACING)
 
-        # Get existing blocks in this layer (in creation order) - excluding current block
+        # Get existing blocks in this layer (excluding current block)
         layer_blocks = [bid for bid in self.creation_order
                         if bid in self.logical_blocks and
                         bid != block.block_id and
                         self._calculate_topological_layer(self.logical_blocks[bid]) == layer]
 
-        # Position based on layer and order within layer - using constants
-        x = 10.0 + (layer * AnimationConstants.BLOCK_SPACING * 3)  # Multiply by 3 for reasonable spacing
-        y = 25.0 + (len(layer_blocks) * 15.0)
+        if len(layer_blocks) == 0:
+            y = 25.0  # First block in layer - use genesis Y
+        else:
+            # Find the actual Y position of the last block in this layer
+            # This requires access to the visual sprite positions, not logical positions
+            # For now, calculate based on expected positions after any adjustments
+            last_block_id = layer_blocks[-1]  # Most recently added block in layer
+
+            # Calculate what the last block's Y should be after layer balancing
+            total_blocks_before = len(layer_blocks)
+            if total_blocks_before == 1:
+                last_expected_y = 25.0
+            else:
+                # Calculate balanced position for the last block
+                total_height = (total_blocks_before - 1) * AnimationConstants.VERTICAL_BLOCK_SPACING
+                start_y = 25.0 - (total_height / 2)
+                last_expected_y = start_y + ((total_blocks_before - 1) * AnimationConstants.VERTICAL_BLOCK_SPACING)
+
+                # Position new block relative to where the last block should be
+            y = last_expected_y + AnimationConstants.VERTICAL_BLOCK_SPACING
 
         return (x, y)
 
@@ -114,14 +132,14 @@ class GhostdagDAG:
             base_y = 25.0
 
             # Distribute blocks evenly around the base Y position
-            total_height = (len(layer_blocks) - 1) * 15.0
+            total_height = (len(layer_blocks) - 1) * AnimationConstants.VERTICAL_BLOCK_SPACING
             start_y = base_y - (total_height / 2)
 
             for i, block_id in enumerate(sorted(layer_blocks)):
-                new_y = start_y + (i * 15.0)
+                new_y = start_y + (i * AnimationConstants.VERTICAL_BLOCK_SPACING)
 
                 # Use the layer's base X position directly, don't recalculate per block
-                current_x = 10.0 + (layer * AnimationConstants.BLOCK_SPACING * 3)
+                current_x = 10.0 + (layer * AnimationConstants.BLOCK_SPACING)
 
                 # Create move animation for this block (preserve X, only change Y)
                 animations.append(MoveToAnimation(

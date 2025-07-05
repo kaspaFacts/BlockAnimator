@@ -59,7 +59,7 @@ class VisualDAGRenderer:
 
             # 7. Add layer adjustment animations if this is a GHOSTDAG
         if hasattr(logical_block, 'metadata') and 'affected_layers' in logical_block.metadata:
-            adjustment_animations = self._create_layer_adjustment_animations(
+            adjustment_animations = self.logical_dag._adjust_layer_positions(
                 logical_block.metadata['affected_layers']
             )
             animations.extend(adjustment_animations)
@@ -81,23 +81,22 @@ class VisualDAGRenderer:
 
                 # Use the same X positioning as the DAG
             from ..consensus.constants import AnimationConstants
-            base_x = 10.0 + (layer * AnimationConstants.BLOCK_SPACING * 3)
+            base_x = 10.0 + (layer * AnimationConstants.BLOCK_SPACING)
             genesis_y = 25.0
 
             # Calculate total height needed and center around genesis
-            total_height = (len(layer_blocks) - 1) * 15.0
+            total_height = (len(layer_blocks) - 1) * AnimationConstants.VERTICAL_BLOCK_SPACING
             start_y = genesis_y - (total_height / 2)
 
             for i, block_id in enumerate(layer_blocks):
                 if block_id in self.sprite_registry:
-                    new_y = start_y + (i * 15.0)
+                    new_y = start_y + (i * AnimationConstants.VERTICAL_BLOCK_SPACING)
 
                     animations.append(MoveToAnimation(
                         sprite_id=block_id,
                         target_grid_x=base_x,  # Now matches DAG positioning
                         target_grid_y=new_y,
-                        duration=1.0,
-                        delay=0.2
+                        duration=1.0
                     ))
 
         return animations
