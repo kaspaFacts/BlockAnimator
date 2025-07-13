@@ -2,10 +2,13 @@
 
 import pygame
 from blockanimator.animation import FadeInAnimation, FadeToAnimation, MoveToAnimation, ColorChangeAnimation
-from ..sprites.block import Block, GhostdagBlock, BitcoinBlock
-from ..sprites.connection import Connection
-from .dag_types import StyledParent
-from .constants import LayerConstants, AnimationConstants
+from blockanimator.sprites.block import Block
+from blockanimator.sprites.connection import Connection
+from blockanimator.consensus.dag_types import StyledParent
+from blockanimator.consensus.constants import LayerConstants, AnimationConstants
+from blockanimator.consensus.blocks.block_factory import ConsensusBlockFactory
+from blockanimator.consensus.visual_block import VisualBlock
+
 
 class BlockDAG:
     def __init__(self, scene, history_size=20):
@@ -30,24 +33,28 @@ class BlockDAG:
         scene.register_dag(self)
 
     def add_sprite(self, sprite_id, grid_x, grid_y, consensus_type="basic", **kwargs):
-        """Add a sprite at grid coordinates with specified consensus type."""
+        """Add a sprite at grid coordinates with specified consensus type using factory pattern."""
         pixel_x, pixel_y = self.scene.coords.grid_to_pixel(grid_x, grid_y)
         text = kwargs.pop('text', sprite_id)
         parents = kwargs.pop('parents', None)
 
-        # Block type factory moved from Scene
-        block_types = {
-            "basic": lambda: Block(pixel_x, pixel_y, sprite_id, self.scene.coords.grid_size, text, **kwargs),
-            "ghostdag": lambda: GhostdagBlock(pixel_x, pixel_y, sprite_id, self.scene.coords.grid_size, text,
-                                              parents=parents, **kwargs),
-            "bitcoin": lambda: BitcoinBlock(pixel_x, pixel_y, sprite_id, self.scene.coords.grid_size, text,
-                                            parent=parents[0] if parents else None, **kwargs)
-        }
+        # Create logical block using factory
+        if consensus_type in ConsensusBlockFactory.get_supported_types():
+            logical_block = ConsensusBlockFactory.create_block(
+                consensus_type, sprite_id, parents, **kwargs
+            )
 
-        if consensus_type not in block_types:
-            raise ValueError(f"Unknown consensus type: {consensus_type}")
+            # Create visual representation using VisualBlock
+            sprite = VisualBlock(
+                pixel_x, pixel_y,
+                logical_block,
+                self.scene.coords.grid_size,
+                **kwargs
+            )
+        else:
+            # Fallback to basic Block for unsupported types
+            sprite = Block(pixel_x, pixel_y, sprite_id, self.scene.coords.grid_size, text, **kwargs)
 
-        sprite = block_types[consensus_type]()
         sprite.grid_x = grid_x
         sprite.grid_y = grid_y
 
@@ -56,27 +63,29 @@ class BlockDAG:
         return sprite
 
     def add_connection(self, connection_id, start_block_id, end_block_id, **kwargs):
-        """Enhanced connection creation with GHOSTDAG awareness."""
+        """Enhanced connection creation with consensus-aware logic."""
         start_block = self.sprite_registry.get(start_block_id)
         end_block = self.sprite_registry.get(end_block_id)
 
         if not start_block or not end_block:
             return None
 
-            # GHOSTDAG-aware connection logic
-        if isinstance(end_block, GhostdagBlock):
-            is_selected_parent = (start_block.sprite_id == end_block.ghostdag_data.selected_parent)
-            is_blue_connection = self._is_blue_connection(start_block.sprite_id, end_block)
+            # Consensus-aware connection logic
+        if hasattr(end_block, 'logical_block') and end_block.logical_block.consensus_type == "ghostdag":
+            logical_block = end_block.logical_block
+            if hasattr(logical_block, 'consensus_data') and logical_block.consensus_data:
+                is_selected_parent = (start_block.sprite_id == logical_block.consensus_data.selected_parent)
+                is_blue_connection = self._is_blue_connection(start_block.sprite_id, end_block)
 
-            if 'color' not in kwargs:
-                if is_selected_parent:
-                    kwargs['color'] = (0, 255, 0)  # Green for selected parent
-                elif is_blue_connection:
-                    kwargs['color'] = (0, 0, 255)  # Blue for blue blocks
-                else:
-                    kwargs['color'] = (255, 0, 0)  # Red for red blocks
+                if 'color' not in kwargs:
+                    if is_selected_parent:
+                        kwargs['color'] = (0, 255, 0)  # Green for selected parent
+                    elif is_blue_connection:
+                        kwargs['color'] = (0, 0, 255)  # Blue for blue blocks
+                    else:
+                        kwargs['color'] = (255, 0, 0)  # Red for red blocks
 
-            kwargs['selected_parent'] = is_selected_parent
+                kwargs['selected_parent'] = is_selected_parent
 
         connection = Connection(start_block, end_block, sprite_id=connection_id, grid_size=self.scene.coords.grid_size,
                                 **kwargs)
@@ -89,12 +98,21 @@ class BlockDAG:
 
     def _is_blue_connection(self, parent_id, child_block):
         """Helper method to determine if a connection represents a blue relationship"""
-        if not hasattr(child_block, 'ghostdag_data') or not child_block.ghostdag_data.mergeset:
+        if not hasattr(child_block, 'logical_block'):
             return False
 
-        k = getattr(child_block, 'ghostdag_k', 3)
-        blue_boundary = min(k + 1, len(child_block.ghostdag_data.mergeset))
-        return parent_id in child_block.ghostdag_data.mergeset[:blue_boundary]
+        logical_block = child_block.logical_block
+        if (logical_block.consensus_type != "ghostdag" or
+                not hasattr(logical_block, 'consensus_data') or
+                not logical_block.consensus_data):
+            return False
+
+        consensus_data = logical_block.consensus_data
+        if not hasattr(consensus_data, 'mergeset_blues'):
+            return False
+
+            # Check if parent is in the blue portion of the mergeset
+        return parent_id in consensus_data.mergeset_blues
 
     def add(self, block_id, grid_pos, label=None, parents=None, **kwargs):
         """Add a block at grid position with automatic parent connections."""
@@ -137,10 +155,12 @@ class BlockDAG:
                         if parent.selected_parent:
                             connection_kwargs['selected_parent'] = True
 
-                            # Set color based on whether this is the selected parent
-                    if (hasattr(sprite, 'ghostdag_data') and
-                            sprite.ghostdag_data and
-                            sprite.ghostdag_data.selected_parent == parent_id):
+                            # Set color based on consensus data if available
+                    if (hasattr(sprite, 'logical_block') and
+                            sprite.logical_block.consensus_type == "ghostdag" and
+                            hasattr(sprite.logical_block, 'consensus_data') and
+                            sprite.logical_block.consensus_data and
+                            sprite.logical_block.consensus_data.selected_parent == parent_id):
                         connection_kwargs['color'] = (0, 0, 255)  # Blue for selected parent
                     else:
                         # Only override color if not already set by Parent object
@@ -158,8 +178,6 @@ class BlockDAG:
         self._update_history()
 
         return animations
-
-        # Animation helper methods moved from Scene
 
     def create(self, block_id, grid_pos, label=None, parents=None, **kwargs):
         """Create a block and connections without any automatic animations."""
@@ -194,10 +212,12 @@ class BlockDAG:
                         if parent.selected_parent:
                             connection_kwargs['selected_parent'] = True
 
-                            # Set color based on whether this is the selected parent (similar to add method)
-                    if (hasattr(sprite, 'ghostdag_data') and
-                            sprite.ghostdag_data and
-                            sprite.ghostdag_data.selected_parent == parent_id):
+                            # Set color based on consensus data if available
+                    if (hasattr(sprite, 'logical_block') and
+                            sprite.logical_block.consensus_type == "ghostdag" and
+                            hasattr(sprite.logical_block, 'consensus_data') and
+                            sprite.logical_block.consensus_data and
+                            sprite.logical_block.consensus_data.selected_parent == parent_id):
                         connection_kwargs['color'] = (0, 0, 255)  # Blue for selected parent
                     else:
                         if 'color' not in connection_kwargs:
@@ -229,7 +249,8 @@ class BlockDAG:
         """Create color change animation for a sprite."""
         if sprite_id not in self.sprite_registry:
             return None
-        return ColorChangeAnimation(sprite_id=sprite_id, target_color=target_color, duration=AnimationConstants.DEFAULT_DURATION)
+        return ColorChangeAnimation(sprite_id=sprite_id, target_color=target_color,
+                                    duration=AnimationConstants.DEFAULT_DURATION)
 
     def _update_history(self):
         """Update the history with current tips."""
@@ -245,7 +266,13 @@ class BlockDAG:
             has_children = False
             for other_id, other_block in self.blocks.items():
                 if other_id != block_id:
-                    if hasattr(other_block, 'parents') and other_block.parents:
+                    if hasattr(other_block, 'logical_block'):
+                        logical_block = other_block.logical_block
+                        if hasattr(logical_block, 'parents') and logical_block.parents:
+                            if block_id in logical_block.parents:
+                                has_children = True
+                                break
+                    elif hasattr(other_block, 'parents') and other_block.parents:
                         parent_ids = [p.parent_id if isinstance(p, StyledParent) else p for p in other_block.parents]
                         if block_id in parent_ids:
                             has_children = True

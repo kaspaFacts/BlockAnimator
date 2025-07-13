@@ -18,6 +18,7 @@ class AnimationController:
             AnimationType.FADE_TO: self._handle_fade_to,
             AnimationType.CHANGE_APPEARANCE: self._handle_change_appearance,
             AnimationType.WAIT: self._handle_wait,
+            AnimationType.DEFERRED_MOVE: self._handle_deferred_move,
         }
 
     def play_simultaneous(self, animations, start_frame=None):
@@ -198,6 +199,28 @@ class AnimationController:
         else:
             current_alpha = int(start_alpha + (target_alpha - start_alpha) * progress)
             sprite.set_alpha(current_alpha)
+
+    def _handle_deferred_move(self, animation: Animation, sprite: Any,
+                              is_complete: bool, progress: float) -> None:
+        """Handle deferred movement with runtime state calculation."""
+        # Calculate target position at execution time, not creation time
+        if animation.target_grid_x is None:
+            current_x = sprite.grid_x
+            current_y = sprite.grid_y
+            animation.target_grid_x = current_x + animation.offset[0]
+            animation.target_grid_y = current_y + animation.offset[1]
+            animation.state.actual_start_grid_x = current_x
+            animation.state.actual_start_grid_y = current_y
+
+            # Use the same interpolation logic as move_to
+        if is_complete:
+            sprite.grid_x = animation.target_grid_x
+            sprite.grid_y = animation.target_grid_y
+        else:
+            sprite.grid_x = animation.state.actual_start_grid_x + \
+                            (animation.target_grid_x - animation.state.actual_start_grid_x) * progress
+            sprite.grid_y = animation.state.actual_start_grid_y + \
+                            (animation.target_grid_y - animation.state.actual_start_grid_y) * progress
 
     def _handle_change_appearance(self, animation: Animation, sprite: Any,
                                   is_complete: bool, progress: float) -> None:

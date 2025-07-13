@@ -11,6 +11,7 @@ class DAGFactory:
     _DAG_TYPES = {
         "bitcoin": ("nakamoto_consensus.bitcoin_dag", "BitcoinDAG"),
         "ghostdag": ("ghostdag.ghostdag_dag", "GhostdagDAG"),
+        "layer": ("layer_dag", "LayerDAG"),
         "iota": ("iota.iota_dag", "IOTADAG"),
     }
 

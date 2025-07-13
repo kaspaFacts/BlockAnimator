@@ -9,59 +9,33 @@ class AnimationOrchestrator:
         self.timeline = timeline
 
     def play(self, *args, **kwargs):
-        """Universal play method that handles different animation types automatically"""
+        """Universal play method that handles animation proxies and different animation types"""
         if not args:
             return
 
-        def flatten_animations(animations):
-            """Recursively flatten nested lists of animations"""
-            flattened = []
-            for item in animations:
-                if isinstance(item, list):
-                    flattened.extend(flatten_animations(item))
-                elif item is not None:
-                    flattened.append(item)
-            return flattened
+        def extract_animations_from_item(item):
+            """Extract animations from various item types"""
+            if hasattr(item, 'pending_animations'):  # Animation proxy
+                animations = list(item.pending_animations)
+                item.pending_animations.clear()
+                return animations
+            elif isinstance(item, list):
+                extracted = []
+                for sub_item in item:
+                    extracted.extend(extract_animations_from_item(sub_item))
+                return extracted
+            elif item is not None:
+                return [item]
+            return []
 
-            # Handle different input types
+            # Extract animations from all arguments
 
-        if len(args) == 1:
-            animation_input = args[0]
+        all_animations = []
+        for arg in args:
+            all_animations.extend(extract_animations_from_item(arg))
 
-            # Check if it's a special animation group/sequence object
-            if hasattr(animation_input, 'animation_type'):
-                if animation_input.animation_type == 'simultaneous':
-                    # Flatten the animations in the group
-                    flattened_animations = flatten_animations(animation_input.animations)
-                    end_frame = self.animation_controller.play_simultaneous(flattened_animations)
-                elif animation_input.animation_type == 'sequential':
-                    # Flatten each group in the sequence
-                    flattened_groups = []
-                    for group in animation_input.animation_groups:
-                        flattened_groups.append(flatten_animations(group))
-                    end_frame = self.animation_controller.play_sequential(flattened_groups)
-                else:
-                    # Single animation
-                    end_frame = self.animation_controller.play_simultaneous([animation_input])
-            elif isinstance(animation_input, list):
-                # List of animations - flatten and play simultaneously
-                flattened_animations = flatten_animations(animation_input)
-                end_frame = self.animation_controller.play_simultaneous(flattened_animations)
-            else:
-                # Single animation
-                end_frame = self.animation_controller.play_simultaneous([animation_input])
-        else:
-            # Multiple arguments - flatten all and play simultaneously
-            all_animations = []
-            for anim in args:
-                if isinstance(anim, list):
-                    all_animations.extend(flatten_animations(anim))
-                elif anim is not None:
-                    all_animations.append(anim)
-
-            end_frame = self.animation_controller.play_simultaneous(all_animations)
-
-            # Update timeline timing
+            # Play all collected animations simultaneously
+        end_frame = self.animation_controller.play_simultaneous(all_animations)
         self.timeline.update_timing(end_frame)
         return end_frame
 

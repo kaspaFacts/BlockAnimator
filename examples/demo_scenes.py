@@ -1,14 +1,16 @@
 # BlockAnimator\examples\demo_scenes.py
 
 import math
-from random import randint
+from random import randint, choice
 from numpy.random import poisson as poi
 
 from blockanimator import *
 from blockanimator.consensus import LogicalDAG
+from blockanimator.consensus.dags import DAGFactory
 from blockanimator.consensus.visual_block import VisualBlock
 from blockanimator.rendering.consensus_scene_adapter import ConsensusSceneAdapter
-
+from blockanimator.consensus.dags.ghostdag import GhostdagDAG
+from blockanimator.rendering.visual_dag_renderer import VisualDAGRenderer
 
 # Stress Test with 50 blocks, multiple parents per block, movement, movement while color and opacity changes
 # set Resolution and FPS to see how fast rendering is on your computer, mp4 output is 61 seconds.
@@ -688,6 +690,510 @@ class ExtendedGhostdagDemo(Scene):
         # Final pause to observe the complete DAG
         self.wait(3)
 
+# Testing new abstraction with addition of layerdag
+class GhostdagPoissonDemo(Scene):
+    """Demonstrates GHOSTDAG with realistic network delays using Poisson distribution."""
+
+    # Configuration constants
+    AVG_NETWORK_DELAY = 3  # Average network delay (lambda for Poisson)
+    TOTAL_BLOCKS = 25
+    DAG_K_PARAMETER = 3
+    MAX_BLOCKS_PER_BATCH = 3
+
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
+
+    def construct(self):
+        # Phase 1: Create logical DAG using new refactored system
+        ghostdag = GhostdagDAG(k=self.DAG_K_PARAMETER, layer_spacing=15, chain_spacing=8)
+
+        # Create visual renderer for the DAG
+        renderer = VisualDAGRenderer(self, ghostdag)
+
+        # Add genesis block - the renderer handles both logical and visual creation
+        genesis_animations = renderer.add_visual_block("Genesis", parents=[])
+        genesis_block = ghostdag.get_block("Genesis")
+        print(f"Added Genesis block with blue score: {genesis_block.consensus_data.blue_score}")
+        self.play(genesis_animations)
+
+        # Create all logical blocks with network delay simulation
+        blocks_remaining = self.TOTAL_BLOCKS
+        batch_number = 0
+
+        while blocks_remaining > 0:
+            batch_number += 1
+            batch_size = randint(1, min(self.MAX_BLOCKS_PER_BATCH, blocks_remaining))
+            blocks_remaining -= batch_size
+
+            print(f"\n--- Batch {batch_number}: Creating {batch_size} blocks ---")
+            batch_animations = []
+
+            # Create blocks in this batch
+            for block_in_batch in range(batch_size):
+                block_id = f"B{batch_number}_{block_in_batch}"
+
+                # Simulate network delay with Poisson distribution
+                network_delay = poi(lam=self.AVG_NETWORK_DELAY)
+
+                # Get current tips (simplified - no history tracking in new system)
+                current_tips = ghostdag.get_tips()
+
+                # Simulate missed blocks by using a subset of tips
+                if network_delay > 0 and len(current_tips) > network_delay:
+                    # Simulate missing recent blocks by using older tips
+                    available_tips = current_tips[:-network_delay] if network_delay < len(current_tips) else ["Genesis"]
+                else:
+                    available_tips = current_tips
+
+                    # Select parents from available tips
+                if len(available_tips) == 0:
+                    parents = ["Genesis"]
+                elif len(available_tips) == 1:
+                    parents = available_tips
+                else:
+                    num_parents = randint(1, min(5, len(available_tips)))
+                    parents = list(set(choice(available_tips) for _ in range(num_parents)))
+
+                    # Use renderer to create both logical and visual block
+                block_animations = renderer.add_visual_block(block_id, parents=parents)
+                block = ghostdag.get_block(block_id)
+
+                print(f"  Block {block_id}:")
+                print(f"    Network delay: {network_delay} steps")
+                print(f"    Parents: {parents}")
+                print(f"    Selected parent: {block.consensus_data.selected_parent}")
+                print(f"    Blue score: {block.consensus_data.blue_score}")
+                print(f"    Mergeset blues: {block.consensus_data.mergeset_blues}")
+
+                batch_animations.extend(block_animations)
+
+                # Play all animations in this batch simultaneously
+            if batch_animations:
+                self.play(batch_animations)
+                self.wait(0.5)  # Brief pause between batches
+
+        # Phase 3: Final statistics and visual effects
+        self._show_final_results(ghostdag)
+
+    def _show_final_results(self, ghostdag):
+        """Show final statistics and highlight the main chain."""
+        stats = ghostdag.get_statistics()
+
+        print(f"\n{'=' * 50}")
+        print("FINAL GHOSTDAG STATISTICS")
+        print(f"{'=' * 50}")
+        print(f"Total blocks: {stats['total_blocks']}")
+        print(f"K parameter: {stats['k_parameter']}")
+        print(f"Current tips: {stats['tips']}")
+        print(f"Blue blocks: {stats['blue_blocks']}")
+        print(f"Red blocks: {stats['red_blocks']}")
+        print(f"Max layer: {stats['max_layer']}")
+
+        if stats.get('highest_scoring_block'):
+            highest_block = stats['highest_scoring_block']
+            print(f"Highest scoring block: {highest_block}")
+
+            # Move camera to focus on the highest scoring block
+            camera_anim = self.camera.animate_camera_to_sprite(highest_block)
+            self.play(camera_anim)
+            self.wait(1)
+
+            # Get and highlight the selected parent chain
+            chain = ghostdag.get_selected_parent_chain(highest_block)
+            print(f"Selected parent chain: {' -> '.join(chain)}")
+
+            # Show additional GHOSTDAG-specific information
+            blue_blocks = ghostdag.get_blue_blocks()
+            red_blocks = ghostdag.get_red_blocks()
+            print(f"Blue blocks: {blue_blocks}")
+            print(f"Red blocks: {red_blocks}")
+
+            # Final wait before ending
+        self.wait(1)
+
+# Testing manim anim chaining
+class TestManimLike(Scene):
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
+
+    def construct(self):
+        dag = BlockDAG(self)
+
+        # Add a block
+        block_anims = dag.add("test_block", (10, 25))
+        self.wait(1)
+        self.play(block_anims)
+
+        # Get the block and use Manim-like syntax
+        block = dag.blocks["test_block"]
+        self.play(block.animate.moveX(10))
+        self.wait(1)
+        self.play(block.animate.shift((10, -10)))
+        self.wait(1)
+
+
+# Testing manim anim chaining with multiple blocks
+class TestManimLikeWithMultiple(Scene):
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
+
+    def construct(self):
+        dag = BlockDAG(self)
+
+        # Add first block
+        block_anims = dag.add("test_block", (10, 25))
+        self.wait(1)
+        self.play(block_anims)
+
+        # Add a second block with parent connection
+        block2_anims = dag.add("block_2", (25, 25), parents=["test_block"])
+        self.play(block2_anims)
+        self.wait(1)
+
+        # Add a third block
+        block3_anims = dag.add("block_3", (10, 10))
+        self.play(block3_anims)
+        self.wait(1)
+
+        # Get blocks and test individual movements
+        block1 = dag.blocks["test_block"]
+        block2 = dag.blocks["block_2"]
+        block3 = dag.blocks["block_3"]
+
+        # Test single block movement
+        self.play(block1.animate.moveX(5))
+        self.wait(1)
+
+        # Test simultaneous movements of multiple blocks
+        self.play(
+            block1.animate.moveY(-5),
+            block2.animate.shift((5, -5)),
+            block3.animate.moveX(15)
+        )
+        self.wait(1)
+
+        # Test chained movements on different blocks
+        self.play(block1.animate.shift((10, -10)))
+        self.wait(0.5)
+        self.play(block2.animate.moveX(-10))
+        self.wait(0.5)
+        self.play(block3.animate.shift((-5, 10)))
+        self.wait(1)
+
+        # Test that connections follow blocks during movement
+        self.play(
+            block1.animate.shift((0, 15)),
+            block2.animate.shift((0, 15))
+        )
+        self.wait(2)
+
+# Testing for blanim like execution
+class TestDAGChaining(Scene):
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
+
+    def construct(self):
+        dag = BlockDAG(self)
+
+        # Create a method on the DAG that returns chained animations
+        def create_chain_with_movement(dag, start_pos, chain_length=3):
+            """Create a chain of blocks with automatic positioning and animations."""
+            animations = []
+
+            # Add genesis block
+            genesis_anims = dag.add("genesis", start_pos)
+            animations.extend(genesis_anims)
+
+            # Add chain blocks with automatic spacing
+            for i in range(1, chain_length + 1):
+                block_id = f"block_{i}"
+                parent_id = "genesis" if i == 1 else f"block_{i - 1}"
+
+                # Position each block to the right of its parent
+                pos = (start_pos[0] + i * 8, start_pos[1])
+                block_anims = dag.add(block_id, pos, parents=[parent_id])
+                animations.extend(block_anims)
+
+            return animations
+
+        def move_chain_in_formation(dag, block_ids, offset):
+            """Move multiple blocks maintaining their relative positions."""
+            animations = []
+            for block_id in block_ids:
+                if block_id in dag.blocks:
+                    block = dag.blocks[block_id]
+                    animations.append(block.animate.shift(offset))
+            return animations
+
+        def create_branching_structure(dag, root_id, branch_positions):
+            """Create a branching structure from a root block."""
+            animations = []
+            for i, pos in enumerate(branch_positions):
+                branch_id = f"{root_id}_branch_{i}"
+                branch_anims = dag.add(branch_id, pos, parents=[root_id])
+                animations.extend(branch_anims)
+            return animations
+
+            # Use the DAG methods to create complex animations
+
+        # Step 1: Create initial chain
+        chain_anims = create_chain_with_movement(dag, (10, 25), 3)
+        self.play(chain_anims)
+        self.wait(1)
+
+        # Step 2: Move the entire chain as a unit
+        chain_ids = ["genesis", "block_1", "block_2", "block_3"]
+        formation_move = move_chain_in_formation(dag, chain_ids, (0, -10))
+        self.play(formation_move)
+        self.wait(1)
+
+        # Step 3: Create branches from the middle block
+        branch_positions = [(35, 10), (35, 30)]
+        branch_anims = create_branching_structure(dag, "block_2", branch_positions)
+        self.play(branch_anims)
+        self.wait(1)
+
+        # Step 4: Demonstrate individual block movements with deferred execution
+        block_2 = dag.blocks["block_2"]
+        branch_0 = dag.blocks["block_2_branch_0"]
+        branch_1 = dag.blocks["block_2_branch_1"]
+
+        # These movements will use the current animated positions
+        self.play(
+            block_2.animate.moveX(5),
+            branch_0.animate.shift((10, 5)),
+            branch_1.animate.shift((10, -5))
+        )
+        self.wait(1)
+
+        # Step 5: Complex chained movement showing deferred execution
+        self.play(block_2.animate.moveY(8))
+        self.wait(0.5)
+
+        # This will move from block_2's NEW position, not its original position
+        self.play(
+            branch_0.animate.shift((-5, 0)),
+            branch_1.animate.shift((-5, 0))
+        )
+        self.wait(2)
+
+
+# Example scene demonstrating the new Manim-like GHOSTDAG animation system
+class GhostdagManimExample(Scene):
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
+
+    def construct(self):
+        # Create a GHOSTDAG with k=3 parameter
+        ghostdag = GhostdagDAG(self, k=3)
+
+        # Step 1: Add genesis block
+        genesis_anims = ghostdag.add_ghostdag_block("genesis")
+        self.play(genesis_anims)
+        self.wait(1)
+
+        # Step 2: Add first generation blocks with parents
+        block_a_anims = ghostdag.add_ghostdag_block("A", parents=["genesis"])
+        block_b_anims = ghostdag.add_ghostdag_block("B", parents=["genesis"])
+        self.play(block_a_anims, block_b_anims)
+        self.wait(1)
+
+        # Step 3: Add second generation with multiple parents (GHOSTDAG feature)
+        block_c_anims = ghostdag.add_ghostdag_block("C", parents=["A", "B"])
+        self.play(block_c_anims)
+        self.wait(1)
+
+        # Step 4: Demonstrate individual block animation using new proxy system
+        genesis = ghostdag.blocks["genesis"]
+        block_a = ghostdag.blocks["A"]
+        block_b = ghostdag.blocks["B"]
+        block_c = ghostdag.blocks["C"]
+
+        # Test deferred execution - these movements use current animated positions
+        self.play(genesis.animate.moveX(5))
+        self.wait(0.5)
+
+        # This moveX will be relative to genesis's NEW position, not original
+        self.play(genesis.animate.moveX(3))
+        self.wait(1)
+
+        # Step 5: Simultaneous multi-block animations with deferred execution
+        self.play(
+            block_a.animate.shift((5, -3)),
+            block_b.animate.shift((5, 3)),
+            block_c.animate.moveY(-5)
+        )
+        self.wait(1)
+
+        # Step 6: Demonstrate GHOSTDAG-specific visualizations
+        # Animate blue score visualization for all blocks
+        blue_score_anims = []
+        for block_id in ["genesis", "A", "B", "C"]:
+            blue_score_anims.extend(ghostdag.animate_blue_score_visualization(block_id))
+
+        self.play(blue_score_anims)
+        self.wait(1)
+
+        # Step 7: Animate the selected parent chain highlighting
+        chain_anims = ghostdag.animate_selected_parent_chain("C")
+        self.play(chain_anims)
+        self.wait(1)
+
+        # Step 8: Demonstrate mergeset visualization
+        mergeset_anims = ghostdag.animate_mergeset_visualization("C")
+        self.play(mergeset_anims)
+        self.wait(1)
+
+        # Step 9: Create a more complex DAG structure
+        block_d_anims = ghostdag.add_ghostdag_block("D", parents=["A", "C"])
+        block_e_anims = ghostdag.add_ghostdag_block("E", parents=["B", "C"])
+        self.play(block_d_anims, block_e_anims)
+        self.wait(1)
+
+        # Step 10: Final GHOSTDAG result animation
+        final_anims = ghostdag.animate_final_ghostdag_result()
+        self.play(final_anims)
+        self.wait(2)
+
+        # Step 11: Demonstrate method chaining (Manim-like syntax)
+        block_d = ghostdag.blocks["D"]
+        block_e = ghostdag.blocks["E"]
+
+        # Chain multiple animations together - each uses the result of the previous
+        self.play(
+            block_d.animate.shift((2, 0)).fade_to(200),
+            block_e.animate.moveX(-3).change_color((255, 100, 100))
+        )
+        self.wait(1)
+
+        # Step 12: Test that connections follow blocks during complex movements
+        # Move all blocks in a coordinated pattern
+        all_blocks = [ghostdag.blocks[bid] for bid in ghostdag.blocks.keys()]
+        coordinated_anims = []
+
+        for i, block in enumerate(all_blocks):
+            # Create a circular movement pattern
+            offset_x = 5 * (i % 3 - 1)  # -5, 0, 5 pattern
+            offset_y = 3 * (i % 2)  # 0, 3 pattern
+            coordinated_anims.append(block.animate.shift((offset_x, offset_y)))
+
+        self.play(coordinated_anims)
+        self.wait(2)
+
+        # Step 13: Return to original positions using deferred execution
+        reset_anims = []
+        for block_id, block in ghostdag.blocks.items():
+            # Each block moves back relative to its current position
+            reset_anims.append(block.animate.shift((0, 0)))  # Or calculate return offset
+
+        self.play(reset_anims)
+        self.wait(1)
+
+# Alternative example showing DAG-level animation methods
+class GhostdagDAGMethodsExample(Scene):
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
+
+    def construct(self):
+        ghostdag = GhostdagDAG(self, k=3)
+
+        # Add blocks individually instead of all at once
+        block_sequence = ["genesis", "A", "B", "C", "D"]
+
+        for block_id in block_sequence:
+            parents = ghostdag._get_parents_for_block(block_id)
+            block_anims = ghostdag.add_ghostdag_block(block_id, parents)
+            self.play(block_anims)  # Play each block's animations individually
+            self.wait(0.5)  # Optional pause between blocks
+
+        self.wait(2)
+
+        # Demonstrate the final result animation
+        final_result = ghostdag.animate_final_ghostdag_result()
+        self.play(final_result)
+        self.wait(2)
+
+# testing new manim like chaining
+class ComprehensiveAnimationTest(Scene):
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
+
+    def construct(self):
+        dag = BlockDAG(self)
+
+        # Test 1: Basic block creation and animation proxy access
+        genesis_anims = dag.add("genesis", (10, 25))
+        self.play(genesis_anims)
+        self.wait(0.5)
+
+        # Test 2: Simple method chaining (shift + fade_to)
+        genesis = dag.blocks["genesis"]
+        self.play(genesis.animate.shift((2, 0)).fade_to(200))
+        self.wait(0.5)
+
+        # Test 3: Multiple animation types in chain
+        self.play(genesis.animate.moveX(3).change_color((255, 100, 100)).fade_to(255))
+        self.wait(0.5)
+
+        # Test 4: Deferred execution - movements relative to current position
+        self.play(genesis.animate.moveY(-3))  # Move from current position
+        self.wait(0.5)
+        self.play(genesis.animate.moveY(2))  # Move from NEW position, not original
+        self.wait(0.5)
+
+        # Test 5: Multiple blocks with simultaneous chained animations
+        block_a_anims = dag.add("block_a", (20, 20))
+        block_b_anims = dag.add("block_b", (30, 30))
+        self.play(block_a_anims, block_b_anims)
+        self.wait(0.5)
+
+        block_a = dag.blocks["block_a"]
+        block_b = dag.blocks["block_b"]
+
+        # Test 6: Simultaneous complex chaining on multiple blocks
+        self.play(
+            block_a.animate.shift((5, -5)).fade_to(150).change_color((0, 255, 0)),
+            block_b.animate.moveX(-8).moveY(3).fade_to(180)
+        )
+        self.wait(0.5)
+
+        # Test 7: Sequential chained animations to verify state persistence
+        self.play(block_a.animate.moveX(2))
+        self.play(block_a.animate.moveX(2))  # Should move from previous position
+        self.play(block_a.animate.shift((0, -4)).fade_to(255))
+        self.wait(0.5)
+
+        # Test 8: Connection following during chained animations
+        connected_anims = dag.add("connected", (35, 25), parents=["block_a"])
+        self.play(connected_anims)
+        self.wait(0.5)
+
+        connected = dag.blocks["connected"]
+
+        # Test 9: Verify connections follow during complex chained movements
+        self.play(
+            block_a.animate.shift((10, 10)).fade_to(200),
+            connected.animate.shift((-5, 5)).change_color((0, 0, 255))
+        )
+        self.wait(1)
+
+        # Test 10: Animation proxy reuse - verify pending_animations.clear() works
+        self.play(genesis.animate.shift((0, 5)))
+        self.wait(0.5)
+        self.play(genesis.animate.moveX(-2))  # Should work without interference
+        self.wait(0.5)
+
+        # Test 11: Mixed animation types in single chain
+        self.play(
+            connected.animate
+            .shift((2, -2))
+            .fade_to(100)
+            .change_color((255, 255, 0))
+            .shift((1, 1))
+            .fade_to(255)
+        )
+        self.wait(2)
+
 class BlockDAGDemo(Scene):
     def construct(self):
         BD = BlockDAG(self)
@@ -831,3 +1337,96 @@ class SimultaneousVsSequentialDemo(Scene):
         self.play(sequential(*sequential_animations))
 
         self.wait(2.0)
+
+# testing 95% refactoring
+class BitcoinForkDemo(Scene):
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
+
+    def construct(self):
+        # Use the visual BitcoinDAG directly, not the factory
+        bitcoin_dag = BitcoinDAG(self)
+
+        # Now this method exists
+        self.play(bitcoin_dag.add_bitcoin_block("Genesis"))
+        self.play(bitcoin_dag.add_bitcoin_block("Block1", "Genesis"))
+        self.wait(1)
+
+# testing 95% refactoring
+class BitcoinForkDemo95(Scene):
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
+
+    def construct(self):
+        from blockanimator.consensus.dags import DAGFactory
+        bitcoin_dag = DAGFactory.create_dag("bitcoin", scene=self)
+
+        # Create initial chain
+        self.play(bitcoin_dag.add_bitcoin_block("Genesis"))
+        self.wait(0.5)
+
+        self.play(bitcoin_dag.add_bitcoin_block("Block1", "Genesis"))
+        self.wait(0.5)
+
+        self.play(bitcoin_dag.add_bitcoin_block("Block2", "Block1"))
+        self.wait(1)
+
+        # Create fork blocks - reorganization happens automatically
+        self.play(bitcoin_dag.add_bitcoin_block("Fork1", "Genesis"))
+        self.wait(0.5)
+
+        self.play(bitcoin_dag.add_bitcoin_block("Fork2", "Fork1"))
+        self.wait(0.5)
+
+        self.play(bitcoin_dag.add_bitcoin_block("Fork3", "Fork2"))
+        self.wait(0.5)
+
+        # This block makes the fork longer - automatic reorganization triggers
+        self.play(bitcoin_dag.add_bitcoin_block("Fork4", "Fork3"))
+
+
+class BitcoinBlockRaceDemo(Scene):
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
+
+    def construct(self):
+        # Create the unified Bitcoin DAG
+        from blockanimator.consensus.dags import DAGFactory
+        bitcoin_dag = DAGFactory.create_dag("bitcoin", scene=self)
+
+        # Phase 1: Build initial chain
+        self.play(bitcoin_dag.add_bitcoin_block("Genesis"))
+        self.wait(0.5)
+
+        self.play(bitcoin_dag.add_bitcoin_block("Block1", "Genesis"))
+        self.wait(0.5)
+
+        self.play(bitcoin_dag.add_bitcoin_block("Block2", "Block1"))
+        self.wait(1)
+
+        # Phase 2: Start the race - two miners find blocks simultaneously
+        # Miner A extends the main chain
+        self.play(bitcoin_dag.add_bitcoin_block("Block3A", "Block2"))
+        self.wait(0.3)
+
+        # Miner B creates a competing fork from Block2
+        self.play(bitcoin_dag.add_bitcoin_block("Block3B", "Block2"))
+        self.wait(1)
+
+        # Phase 3: The race continues - both sides add more blocks
+        # Miner A adds another block (chain length = 4)
+        self.play(bitcoin_dag.add_bitcoin_block("Block4A", "Block3A"))
+        self.wait(0.5)
+
+        # Miner B adds another block (chain length = 4, still tied)
+        self.play(bitcoin_dag.add_bitcoin_block("Block4B", "Block3B"))
+        self.wait(1)
+
+        # Phase 4: The decisive moment - Miner B finds the next block first
+        # This makes the B fork longer (5 blocks vs 4), triggering reorganization
+        self.play(bitcoin_dag.add_bitcoin_block("Block5B", "Block4B"))
+        self.wait(2)  # Allow time to see the reorganization
+
+        # Phase 5: Show the final state with camera movement
+        self.play(self.camera.animate_camera_to_sprite("Block5B"))
+        self.wait(1)

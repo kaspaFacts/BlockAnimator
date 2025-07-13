@@ -10,9 +10,9 @@ This package provides different consensus mechanism implementations:
 """
 
 from .dag_types import StyledParent
-from .base_dag import BlockDAG
+from blockanimator.consensus.dags.base_dag import BlockDAG
 from .bitcoin_dag import BitcoinDAG
-from .layer_dag import LayerDAG
+from blockanimator.consensus.dags.layer_dag import LayerDAG
 from .ghostdag_dag import GhostDAG
 from .manager import ConsensusManager
 from .constants import LayerConstants, AnimationConstants

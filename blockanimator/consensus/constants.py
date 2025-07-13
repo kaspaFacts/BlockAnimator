@@ -1,5 +1,5 @@
 # BlockAnimator/blockanimator/consensus/constants.py
-
+# TODO remove DAG constants and place them in each DAG
 
 class LayerConstants:
     CONNECTION_LAYER = 0

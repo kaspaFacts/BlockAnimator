@@ -15,6 +15,7 @@ class AnimationType(Enum):
     CAMERA_MOVE = "camera_move"
     CHANGE_APPEARANCE = "change_appearance"
     WAIT = "wait"
+    DEFERRED_MOVE = "deferred_move"
 
 
 @dataclass
@@ -91,3 +92,10 @@ class ChangeAppearanceAnimation(Animation):
 @dataclass
 class WaitAnimation(Animation):
     type: AnimationType = field(default=AnimationType.WAIT, init=False)
+
+@dataclass
+class DeferredMoveAnimation(Animation):
+    type: AnimationType = field(default=AnimationType.DEFERRED_MOVE, init=False)
+    offset: tuple = (0.0, 0.0)  # Store offset instead of absolute position
+    target_grid_x: Optional[float] = None  # Will be calculated at execution time
+    target_grid_y: Optional[float] = None

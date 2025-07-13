@@ -1,7 +1,7 @@
 # BlockAnimator\blockanimator\consensus\layer_dag.py
 
-from .base_dag import BlockDAG
-from .dag_types import StyledParent
+from blockanimator.consensus.dags.base_dag import BlockDAG
+from blockanimator.consensus.dag_types import StyledParent
 
 class LayerDAG(BlockDAG):
     def __init__(self, scene, layer_spacing=10, chain_spacing=6, width=4):

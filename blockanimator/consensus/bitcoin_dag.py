@@ -1,6 +1,6 @@
 # BlockAnimator\blockanimator\consensus\nakamoto_consensus.py
 
-from .base_dag import BlockDAG
+from blockanimator.consensus.dags.base_dag import BlockDAG
 from blockanimator.animation import ColorChangeAnimation
 
 class BitcoinDAG(BlockDAG):

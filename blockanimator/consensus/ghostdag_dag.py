@@ -1,6 +1,6 @@
 # BlockAnimator\blockanimator\consensus\ghostdag_dag.py
 
-from .layer_dag import LayerDAG
+from blockanimator.consensus.dags.layer_dag import LayerDAG
 from .dag_types import StyledParent
 from .constants import AnimationConstants
 from blockanimator.animation import MoveToAnimation, ColorChangeAnimation, FadeToAnimation
