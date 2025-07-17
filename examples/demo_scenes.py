@@ -11,6 +11,8 @@ from blockanimator.consensus.visual_block import VisualBlock
 from blockanimator.rendering.consensus_scene_adapter import ConsensusSceneAdapter
 from blockanimator.consensus.dags.ghostdag import GhostdagDAG
 from blockanimator.rendering.visual_dag_renderer import VisualDAGRenderer
+from blockanimator.consensus.dags.nakamoto_consensus.bitcoin_dag import BitcoinDAG
+from blockanimator.animation import FadeInAnimation
 
 # Stress Test with 50 blocks, multiple parents per block, movement, movement while color and opacity changes
 # set Resolution and FPS to see how fast rendering is on your computer, mp4 output is 61 seconds.
@@ -1430,3 +1432,607 @@ class BitcoinBlockRaceDemo(Scene):
         # Phase 5: Show the final state with camera movement
         self.play(self.camera.animate_camera_to_sprite("Block5B"))
         self.wait(1)
+
+
+class ZFirstTest(Scene):
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
+
+    def construct(self):
+        # Create basic DAG without Bitcoin-specific logic
+        dag = BlockDAG(scene=self)
+
+        # Define positioning constants
+        genesis_y = 25
+        fork_vertical_offset = 8
+        half_offset = fork_vertical_offset / 2  # Half spacing for equal positioning
+
+        # Genesis block
+        genesis_anims = dag.add("Genesis", (10, genesis_y))
+        self.play(genesis_anims)
+
+        # Block1 extends Genesis
+        block1_anims = dag.add("Block1", (20, genesis_y), parents=["Genesis"])
+        self.play(block1_anims)
+
+        # Create fork blocks with opacity 0 initially
+        # Block2A (main chain) - starts at parent's Y position
+        parent_y = dag.blocks["Block1"].grid_pos[1]
+        block2a_anims = dag.create("Block2A", (30, parent_y), parents=["Block1"])
+        dag.blocks["Block2A"].set_alpha(0)
+        dag.blocks["Block2A"].set_visible(False)
+
+        # Block2B (fork chain) - starts at offset below Block2A's position
+        block2b_initial_y = parent_y - fork_vertical_offset
+        block2b_anims = dag.create("Block2B", (30, block2b_initial_y), parents=["Block1"])
+        dag.blocks["Block2B"].set_alpha(0)
+        dag.blocks["Block2B"].set_visible(False)
+
+        # Hide connections initially
+        for sprite_id in ["Block1_to_Block2A", "Block1_to_Block2B"]:
+            if sprite_id in dag.sprite_registry:
+                dag.sprite_registry[sprite_id].set_alpha(0)
+                dag.sprite_registry[sprite_id].set_visible(False)
+
+                # Reveal Block2A
+        dag.blocks["Block2A"].set_visible(True)
+        dag.sprite_registry["Block1_to_Block2A"].set_visible(True)
+        fade_2a = FadeInAnimation(sprite_id="Block2A", duration=1.0)
+        conn_2a = FadeInAnimation(sprite_id="Block1_to_Block2A", duration=1.0)
+        self.play([fade_2a, conn_2a])
+
+        # Reveal Block2B and trigger equal-length positioning with both moving up
+        dag.blocks["Block2B"].set_visible(True)
+        dag.sprite_registry["Block1_to_Block2B"].set_visible(True)
+        fade_2b = FadeInAnimation(sprite_id="Block2B", duration=1.0)
+        conn_2b = FadeInAnimation(sprite_id="Block1_to_Block2B", duration=1.0)
+
+        # Equal length positioning: both chains move to half offset positions (both moving up)
+        move_2a_equal = dag.move_to("Block2A", (30, genesis_y + half_offset), duration=2.0)
+        move_2b_equal = dag.move_to("Block2B", (30, genesis_y - half_offset), duration=2.0)
+
+        # Play fade-in and movement simultaneously
+        self.play([fade_2b, conn_2b, move_2a_equal, move_2b_equal])
+
+        # NOW create Block3A at Block2A's CURRENT position (after it moved)
+        block2a_current_y = genesis_y + half_offset  # Block2A's position after equal-length positioning
+        block3a_anims = dag.create("Block3A", (40, block2a_current_y), parents=["Block2A"])
+        dag.blocks["Block3A"].set_alpha(0)
+        dag.blocks["Block3A"].set_visible(False)
+
+        # Hide Block3A's connection initially
+        if "Block2A_to_Block3A" in dag.sprite_registry:
+            dag.sprite_registry["Block2A_to_Block3A"].set_alpha(0)
+            dag.sprite_registry["Block2A_to_Block3A"].set_visible(False)
+
+            # Reveal Block3A (makes main chain longer) - it fades in at its parent's current Y
+        dag.blocks["Block3A"].set_visible(True)
+        dag.sprite_registry["Block2A_to_Block3A"].set_visible(True)
+        fade_3a = FadeInAnimation(sprite_id="Block3A", duration=1.0)
+        conn_3a = FadeInAnimation(sprite_id="Block2A_to_Block3A", duration=1.0)
+
+        # Fork reorganization: longer chain moves to genesis Y, shorter chain moves to full offset
+        move_2a_reorg = dag.move_to("Block2A", (30, genesis_y), duration=2.0)
+        move_3a_reorg = dag.move_to("Block3A", (40, genesis_y), duration=2.0)
+        move_2b_reorg = dag.move_to("Block2B", (30, genesis_y - fork_vertical_offset), duration=2.0)
+
+        # Add delay to reorganization animations
+        move_2a_reorg.delay = 1.0
+        move_3a_reorg.delay = 1.0
+        move_2b_reorg.delay = 1.0
+
+        self.play([fade_3a, conn_3a, move_2a_reorg, move_3a_reorg, move_2b_reorg])
+
+        self.wait(2)
+
+
+class ZWorking(Scene):
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
+
+    def construct(self):
+        # Create basic DAG without Bitcoin-specific logic
+        dag = BlockDAG(scene=self)
+
+        # Define positioning constants
+        genesis_y = 25
+        fork_vertical_offset = 8
+        half_offset = fork_vertical_offset / 2  # Half spacing for equal positioning
+
+        # Genesis block
+        genesis_anims = dag.add("Genesis", (10, genesis_y))
+        self.play(genesis_anims)
+
+        # Block1 extends Genesis
+        block1_anims = dag.add("Block1", (20, genesis_y), parents=["Genesis"])
+        self.play(block1_anims)
+
+        # Create initial fork blocks with opacity 0
+        parent_y = dag.blocks["Block1"].grid_pos[1]
+
+        # Block2A (main chain) - starts at parent's Y position
+        block2a_anims = dag.create("Block2A", (30, parent_y), parents=["Block1"])
+        dag.blocks["Block2A"].set_alpha(0)
+        dag.blocks["Block2A"].set_visible(False)
+
+        # Block2B (fork chain) - starts at offset below Block2A's position
+        block2b_initial_y = parent_y - fork_vertical_offset
+        block2b_anims = dag.create("Block2B", (30, block2b_initial_y), parents=["Block1"])
+        dag.blocks["Block2B"].set_alpha(0)
+        dag.blocks["Block2B"].set_visible(False)
+
+        # Hide connections initially
+        for sprite_id in ["Block1_to_Block2A", "Block1_to_Block2B"]:
+            if sprite_id in dag.sprite_registry:
+                dag.sprite_registry[sprite_id].set_alpha(0)
+                dag.sprite_registry[sprite_id].set_visible(False)
+
+                # Reveal Block2A
+        dag.blocks["Block2A"].set_visible(True)
+        dag.sprite_registry["Block1_to_Block2A"].set_visible(True)
+        fade_2a = FadeInAnimation(sprite_id="Block2A", duration=1.0)
+        conn_2a = FadeInAnimation(sprite_id="Block1_to_Block2A", duration=1.0)
+        self.play([fade_2a, conn_2a])
+
+        # Reveal Block2B and trigger equal-length positioning
+        dag.blocks["Block2B"].set_visible(True)
+        dag.sprite_registry["Block1_to_Block2B"].set_visible(True)
+        fade_2b = FadeInAnimation(sprite_id="Block2B", duration=1.0)
+        conn_2b = FadeInAnimation(sprite_id="Block1_to_Block2B", duration=1.0)
+
+        # Equal length positioning: both chains move to half offset positions
+        move_2a_equal = dag.move_to("Block2A", (30, genesis_y + half_offset), duration=2.0)
+        move_2b_equal = dag.move_to("Block2B", (30, genesis_y - half_offset), duration=2.0)
+
+        self.play([fade_2b, conn_2b, move_2a_equal, move_2b_equal])
+
+        # Create Block3A at Block2A's current position
+        block2a_current_y = genesis_y + half_offset
+        block3a_anims = dag.create("Block3A", (40, block2a_current_y), parents=["Block2A"])
+        dag.blocks["Block3A"].set_alpha(0)
+        dag.blocks["Block3A"].set_visible(False)
+
+        # Create Block3B at Block2B's current position (extending the race)
+        block2b_current_y = genesis_y - half_offset
+        block3b_anims = dag.create("Block3B", (40, block2b_current_y), parents=["Block2B"])
+        dag.blocks["Block3B"].set_alpha(0)
+        dag.blocks["Block3B"].set_visible(False)
+
+        # Hide connections
+        for sprite_id in ["Block2A_to_Block3A", "Block2B_to_Block3B"]:
+            if sprite_id in dag.sprite_registry:
+                dag.sprite_registry[sprite_id].set_alpha(0)
+                dag.sprite_registry[sprite_id].set_visible(False)
+
+                # Reveal Block3A (chains still equal length)
+        dag.blocks["Block3A"].set_visible(True)
+        dag.sprite_registry["Block2A_to_Block3A"].set_visible(True)
+        fade_3a = FadeInAnimation(sprite_id="Block3A", duration=1.0)
+        conn_3a = FadeInAnimation(sprite_id="Block2A_to_Block3A", duration=1.0)
+        self.play([fade_3a, conn_3a])
+
+        # Reveal Block3B (still equal length - race continues)
+        dag.blocks["Block3B"].set_visible(True)
+        dag.sprite_registry["Block2B_to_Block3B"].set_visible(True)
+        fade_3b = FadeInAnimation(sprite_id="Block3B", duration=1.0)
+        conn_3b = FadeInAnimation(sprite_id="Block2B_to_Block3B", duration=1.0)
+        self.play([fade_3b, conn_3b])
+
+        # Create Block4A and Block4B to continue the race
+        block4a_anims = dag.create("Block4A", (50, block2a_current_y), parents=["Block3A"])
+        dag.blocks["Block4A"].set_alpha(0)
+        dag.blocks["Block4A"].set_visible(False)
+
+        block4b_anims = dag.create("Block4B", (50, block2b_current_y), parents=["Block3B"])
+        dag.blocks["Block4B"].set_alpha(0)
+        dag.blocks["Block4B"].set_visible(False)
+
+        # Hide connections
+        for sprite_id in ["Block3A_to_Block4A", "Block3B_to_Block4B"]:
+            if sprite_id in dag.sprite_registry:
+                dag.sprite_registry[sprite_id].set_alpha(0)
+                dag.sprite_registry[sprite_id].set_visible(False)
+
+                # Reveal Block4A
+        dag.blocks["Block4A"].set_visible(True)
+        dag.sprite_registry["Block3A_to_Block4A"].set_visible(True)
+        fade_4a = FadeInAnimation(sprite_id="Block4A", duration=1.0)
+        conn_4a = FadeInAnimation(sprite_id="Block3A_to_Block4A", duration=1.0)
+        self.play([fade_4a, conn_4a])
+
+        # Reveal Block4B (still equal)
+        dag.blocks["Block4B"].set_visible(True)
+        dag.sprite_registry["Block3B_to_Block4B"].set_visible(True)
+        fade_4b = FadeInAnimation(sprite_id="Block4B", duration=1.0)
+        conn_4b = FadeInAnimation(sprite_id="Block3B_to_Block4B", duration=1.0)
+        self.play([fade_4b, conn_4b])
+
+        # Create Block5A to finally break the tie (main chain wins the race)
+        block5a_anims = dag.create("Block5A", (60, block2a_current_y), parents=["Block4A"])
+        dag.blocks["Block5A"].set_alpha(0)
+        dag.blocks["Block5A"].set_visible(False)
+
+        if "Block4A_to_Block5A" in dag.sprite_registry:
+            dag.sprite_registry["Block4A_to_Block5A"].set_alpha(0)
+            dag.sprite_registry["Block4A_to_Block5A"].set_visible(False)
+
+            # Reveal Block5A (main chain becomes longer - race ends)
+        dag.blocks["Block5A"].set_visible(True)
+        dag.sprite_registry["Block4A_to_Block5A"].set_visible(True)
+        fade_5a = FadeInAnimation(sprite_id="Block5A", duration=1.0)
+        conn_5a = FadeInAnimation(sprite_id="Block4A_to_Block5A", duration=1.0)
+
+        # Fork reorganization: main chain (longer) moves to genesis Y, fork chain moves to full offset
+        move_2a_reorg = dag.move_to("Block2A", (30, genesis_y), duration=2.0)
+        move_3a_reorg = dag.move_to("Block3A", (40, genesis_y), duration=2.0)
+        move_4a_reorg = dag.move_to("Block4A", (50, genesis_y), duration=2.0)
+        move_5a_reorg = dag.move_to("Block5A", (60, genesis_y), duration=2.0)
+
+        move_2b_reorg = dag.move_to("Block2B", (30, genesis_y - fork_vertical_offset), duration=2.0)
+        move_3b_reorg = dag.move_to("Block3B", (40, genesis_y - fork_vertical_offset), duration=2.0)
+        move_4b_reorg = dag.move_to("Block4B", (50, genesis_y - fork_vertical_offset), duration=2.0)
+
+        # Add delay to reorganization animations
+        reorg_animations = [move_2a_reorg, move_3a_reorg, move_4a_reorg, move_5a_reorg,
+                            move_2b_reorg, move_3b_reorg, move_4b_reorg]
+        for anim in reorg_animations:
+            anim.delay = 1.0
+
+        self.play([fade_5a, conn_5a] + reorg_animations)
+
+        self.wait(2)
+
+class Z(Scene):
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
+
+    def construct(self):
+        # Create basic DAG and fork manager
+        dag = BlockDAG(scene=self)
+        fork_manager = ForkPositionManager(dag)
+
+        # Pre-create all blocks with opacity 0
+        self._create_all_blocks(dag, fork_manager)
+
+        # Register all block relationships
+        fork_manager.register_block("Genesis")
+        fork_manager.register_block("Block1", "Genesis")
+        fork_manager.register_block("Block2A", "Block1")
+        fork_manager.register_block("Block2B", "Block1")
+        fork_manager.register_block("Block3A", "Block2A")
+        fork_manager.register_block("Block3B", "Block2B")
+        fork_manager.register_block("Block4A", "Block3A")
+        fork_manager.register_block("Block4B", "Block3B")
+        fork_manager.register_block("Block5A", "Block4A")
+
+        # Reveal blocks one by one - positioning happens automatically
+        genesis_anims = fork_manager.reveal_block("Genesis")
+        self.play(genesis_anims)
+
+        block1_anims = fork_manager.reveal_block("Block1")
+        self.play(block1_anims)
+
+        block2a_anims = fork_manager.reveal_block("Block2A")
+        self.play(block2a_anims)
+
+        # Fork positioning happens automatically when Block2B is revealed
+        block2b_anims = fork_manager.reveal_block("Block2B")
+        self.play(block2b_anims)
+
+        # Continue the race
+        block3a_anims = fork_manager.reveal_block("Block3A")
+        self.play(block3a_anims)
+
+        block3b_anims = fork_manager.reveal_block("Block3B")
+        self.play(block3b_anims)
+
+        block4a_anims = fork_manager.reveal_block("Block4A")
+        self.play(block4a_anims)
+
+        block4b_anims = fork_manager.reveal_block("Block4B")
+        self.play(block4b_anims)
+
+        # Block5A breaks the tie - automatic reorganization
+        block5a_anims = fork_manager.reveal_block("Block5A")
+        self.play(block5a_anims)
+
+        self.wait(2)
+
+    def _create_all_blocks(self, dag, fork_manager):
+        """Pre-create all blocks with proper positioning"""
+        genesis_y = fork_manager.genesis_y
+        fork_offset = fork_manager.fork_offset
+
+        # Create all blocks initially hidden
+        dag.create("Genesis", (10, genesis_y))
+        dag.create("Block1", (20, genesis_y), parents=["Genesis"])
+        dag.create("Block2A", (30, genesis_y), parents=["Block1"])
+        dag.create("Block2B", (30, genesis_y - fork_offset), parents=["Block1"])
+        dag.create("Block3A", (40, genesis_y), parents=["Block2A"])
+        dag.create("Block3B", (40, genesis_y - fork_offset), parents=["Block2B"])
+        dag.create("Block4A", (50, genesis_y), parents=["Block3A"])
+        dag.create("Block4B", (50, genesis_y - fork_offset), parents=["Block3B"])
+        dag.create("Block5A", (60, genesis_y), parents=["Block4A"])
+
+        # Hide all blocks and connections initially
+        all_blocks = ["Genesis", "Block1", "Block2A", "Block2B", "Block3A", "Block3B", "Block4A", "Block4B", "Block5A"]
+        for block_id in all_blocks:
+            if block_id in dag.blocks:
+                dag.blocks[block_id].set_alpha(0)
+                dag.blocks[block_id].set_visible(False)
+
+                # Hide all connections
+        connections = [
+            "Genesis_to_Block1", "Block1_to_Block2A", "Block1_to_Block2B",
+            "Block2A_to_Block3A", "Block2B_to_Block3B", "Block3A_to_Block4A",
+            "Block3B_to_Block4B", "Block4A_to_Block5A"
+        ]
+        for conn_id in connections:
+            if conn_id in dag.sprite_registry:
+                dag.sprite_registry[conn_id].set_alpha(0)
+                dag.sprite_registry[conn_id].set_visible(False)
+
+class ForkPositionManager:
+    def __init__(self, dag, genesis_y=25, fork_offset=8):
+        self.dag = dag
+        self.genesis_y = genesis_y
+        self.fork_offset = fork_offset
+        self.half_offset = fork_offset / 2
+        self.visible_blocks = set()
+        self.block_parents = {}
+        self.block_children = {}
+
+    def register_block(self, block_id, parent_id=None):
+        """Register a block with its parent relationship"""
+        self.block_parents[block_id] = parent_id
+
+        # Track children relationships
+        if parent_id:
+            if parent_id not in self.block_children:
+                self.block_children[parent_id] = []
+            self.block_children[parent_id].append(block_id)
+
+    def reveal_block(self, block_id):
+        """Reveal a block and trigger automatic repositioning"""
+        # Make block visible
+        if block_id in self.dag.blocks:
+            self.dag.blocks[block_id].set_visible(True)
+            self.visible_blocks.add(block_id)
+
+            # Make connection visible
+        parent_id = self.block_parents.get(block_id)
+        if parent_id:
+            conn_id = f"{parent_id}_to_{block_id}"
+            if conn_id in self.dag.sprite_registry:
+                self.dag.sprite_registry[conn_id].set_visible(True)
+
+                # Calculate new positions for all blocks
+        repositioning_animations = self._recalculate_all_positions()
+
+        # Create fade-in animations
+        fade_anims = [FadeInAnimation(sprite_id=block_id, duration=1.0)]
+        if parent_id:
+            conn_id = f"{parent_id}_to_{block_id}"
+            if conn_id in self.dag.sprite_registry:
+                fade_anims.append(FadeInAnimation(sprite_id=conn_id, duration=1.0))
+
+        return fade_anims + repositioning_animations
+
+    def _recalculate_all_positions(self):
+        """Recalculate positions and colors for all blocks based on current chain state"""
+        chains = self._build_chains_from_structure()
+        animations = []
+
+        if len(chains) <= 1:
+            # Single chain - all blocks at genesis Y and blue
+            target_y = self.genesis_y
+            target_color = (0, 0, 255)  # Blue
+            for chain in chains:
+                for block_id in chain:
+                    if block_id in self.visible_blocks:
+                        animations.extend(self._move_block_and_children(block_id, target_y))
+                        animations.extend(self._color_block_and_children(block_id, target_color))
+        else:
+            # Multiple chains - apply fork positioning and coloring logic
+            chain_lengths = [len([b for b in chain if b in self.visible_blocks]) for chain in chains]
+            max_length = max(chain_lengths) if chain_lengths else 0
+
+            for i, chain in enumerate(chains):
+                visible_chain_blocks = [b for b in chain if b in self.visible_blocks]
+                if not visible_chain_blocks:
+                    continue
+
+                chain_length = len(visible_chain_blocks)
+
+                if chain_length == max_length:
+                    if chain_lengths.count(max_length) > 1:
+                        # Equal length chains - half offset positioning, both blue
+                        target_y = self.genesis_y + (self.half_offset if i == 0 else -self.half_offset)
+                        target_color = (0, 0, 255)  # Blue for equal chains
+                    else:
+                        # Longest chain goes to genesis, blue color
+                        target_y = self.genesis_y
+                        target_color = (0, 0, 255)  # Blue for longest chain
+                else:
+                    # Shorter chain gets full offset, red color
+                    target_y = self.genesis_y - self.fork_offset
+                    target_color = (255, 0, 0)  # Red for shorter chain
+
+                for block_id in visible_chain_blocks:
+                    animations.extend(self._move_block_and_children(block_id, target_y))
+                    animations.extend(self._color_block_and_children(block_id, target_color))
+
+        return animations
+
+
+
+    def _build_chains_from_structure(self):
+        """Build chains based on parent-child structure, not just visible blocks"""
+        # Find blocks that have multiple children (fork points)
+        fork_points = []
+        for block_id, children in self.block_children.items():
+            if len(children) > 1:
+                fork_points.append(block_id)
+
+        if not fork_points:
+            # No forks - single chain
+            return [list(self.visible_blocks)]
+
+            # Build separate chains from each fork point
+        chains = []
+        for fork_point in fork_points:
+            children = self.block_children[fork_point]
+            for child in children:
+                chain = self._build_chain_from_block(child)
+                if chain:
+                    chains.append(chain)
+
+        return chains
+
+    def _build_chain_from_block(self, start_block):
+        """Build a chain starting from a specific block"""
+        chain = [start_block]
+        current = start_block
+
+        # Follow the chain through children
+        while True:
+            children = self.block_children.get(current, [])
+            if len(children) == 1:
+                current = children[0]
+                chain.append(current)
+            else:
+                break  # Multiple children or no children - end of chain
+
+        return chain
+
+    def _move_block_and_children(self, block_id, target_y):
+        """Move a block and all its children (including invisible ones) to target Y"""
+        animations = []
+
+        # Move the block itself if it exists
+        if block_id in self.dag.blocks:
+            current_pos = self.dag.blocks[block_id].grid_pos
+            new_pos = (current_pos[0], target_y)
+            move_anim = self.dag.move_to(block_id, new_pos, duration=2.0)
+            if move_anim:
+                move_anim.delay = 0.0  # Remove delay for consistent pacing
+                animations.append(move_anim)
+
+                # Move all children recursively
+        children = self.block_children.get(block_id, [])
+        for child_id in children:
+            animations.extend(self._move_block_and_children(child_id, target_y))
+
+        return animations
+
+    def _color_block_and_children(self, block_id, target_color):
+        """Color a block and all its children (including invisible ones)"""
+        animations = []
+
+        # Color the block itself if it exists
+        if block_id in self.dag.blocks:
+            color_anim = self.dag.change_color(block_id, target_color, duration=2.0)
+            if color_anim:
+                color_anim.delay = 0.0  # Remove delay for consistent pacing
+                animations.append(color_anim)
+
+                # Color all children recursively
+        children = self.block_children.get(block_id, [])
+        for child_id in children:
+            animations.extend(self._color_block_and_children(child_id, target_color))
+
+        return animations
+
+def create_dynamic_block_race(scene, race_length=5, fork_at_block=1):
+    """
+    Create a dynamic block race of any length
+
+    Args:
+        scene: The scene to add the race to
+        race_length: Number of blocks in each competing chain
+        fork_at_block: Which block number to fork at (1 = fork after Block1)
+    """
+    dag = BlockDAG(scene=scene)
+    fork_manager = ForkPositionManager(dag)
+
+    # Generate block structure
+    blocks_to_create = []
+    blocks_to_reveal = []
+
+    # Genesis and initial chain
+    blocks_to_create.append(("Genesis", None, (10, 25)))
+    blocks_to_reveal.append("Genesis")
+
+    # Blocks before fork
+    for i in range(1, fork_at_block + 1):
+        block_id = f"Block{i}"
+        parent_id = f"Block{i - 1}" if i > 1 else "Genesis"
+        pos = (10 + i * 10, 25)
+        blocks_to_create.append((block_id, parent_id, pos))
+        blocks_to_reveal.append(block_id)
+
+        # Racing blocks
+    fork_parent = f"Block{fork_at_block}"
+    for i in range(race_length):
+        block_num = fork_at_block + i + 1
+
+        # Chain A block
+        block_a_id = f"Block{block_num}A"
+        parent_a = f"Block{block_num - 1}A" if i > 0 else fork_parent
+        pos_a = (10 + block_num * 10, 25)
+        blocks_to_create.append((block_a_id, parent_a, pos_a))
+        blocks_to_reveal.append(block_a_id)
+
+        # Chain B block
+        block_b_id = f"Block{block_num}B"
+        parent_b = f"Block{block_num - 1}B" if i > 0 else fork_parent
+        pos_b = (10 + block_num * 10, 25 - 8)
+        blocks_to_create.append((block_b_id, parent_b, pos_b))
+        blocks_to_reveal.append(block_b_id)
+
+        # Winner block (extends chain A)
+    winner_id = f"Block{fork_at_block + race_length + 1}A"
+    winner_parent = f"Block{fork_at_block + race_length}A"
+    winner_pos = (10 + (fork_at_block + race_length + 1) * 10, 25)
+    blocks_to_create.append((winner_id, winner_parent, winner_pos))
+    blocks_to_reveal.append(winner_id)
+
+    # Create all blocks
+    for block_id, parent_id, pos in blocks_to_create:
+        parents = [parent_id] if parent_id else []
+        dag.create(block_id, pos, parents=parents)
+
+        # Hide block
+        if block_id in dag.blocks:
+            dag.blocks[block_id].set_alpha(0)
+            dag.blocks[block_id].set_visible(False)
+
+            # Register with fork manager
+        fork_manager.register_block(block_id, parent_id)
+
+        # Hide connections
+        if parent_id:
+            conn_id = f"{parent_id}_to_{block_id}"
+            if conn_id in dag.sprite_registry:
+                dag.sprite_registry[conn_id].set_alpha(0)
+                dag.sprite_registry[conn_id].set_visible(False)
+
+    return dag, fork_manager, blocks_to_reveal
+
+
+class DynamicBlockRaceScene(Scene):
+    def __init__(self, race_length=5):
+        super().__init__(resolution="1080p", fps=60)
+        self.race_length = race_length
+
+    def construct(self):
+        dag, fork_manager, reveal_sequence = create_dynamic_block_race(
+            self, race_length=self.race_length
+        )
+
+        # Reveal blocks in sequence
+        for block_id in reveal_sequence:
+            animations = fork_manager.reveal_block(block_id)
+            self.play(animations)
+
+        self.wait(2)
