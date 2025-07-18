@@ -4,11 +4,183 @@ from typing import Dict, List, Optional, Tuple, Any
 from ..base_dag import BlockDAG
 from ...blocks.consensus_block import ConsensusBlock
 from ...blocks.block_factory import ConsensusBlockFactory
-from ....animation.anim_types import DeferredMoveAnimation
+from ....animation.anim_types import DeferredMoveAnimation, FadeInAnimation, MoveToAnimation, ColorChangeAnimation
+
+
+class ForkPositionManager:
+    """Manages dynamic fork positioning and visualization for Bitcoin DAG"""
+
+    def __init__(self, dag, genesis_y=25, fork_offset=8):
+        self.dag = dag
+        self.genesis_y = genesis_y
+        self.fork_offset = fork_offset
+        self.half_offset = fork_offset / 2
+        self.visible_blocks = set()
+        self.block_parents = {}
+        self.block_children = {}
+
+    def register_block(self, block_id, parent_id=None):
+        """Register a block with its parent relationship"""
+        self.block_parents[block_id] = parent_id
+
+        # Track children relationships
+        if parent_id:
+            if parent_id not in self.block_children:
+                self.block_children[parent_id] = []
+            self.block_children[parent_id].append(block_id)
+
+    def reveal_block(self, block_id):
+        """Reveal a block and trigger automatic repositioning"""
+        # Make block visible
+        if block_id in self.dag.blocks:
+            self.dag.blocks[block_id].set_visible(True)
+            self.visible_blocks.add(block_id)
+
+            # Make connection visible
+        parent_id = self.block_parents.get(block_id)
+        if parent_id:
+            conn_id = f"{parent_id}_to_{block_id}"
+            if conn_id in self.dag.sprite_registry:
+                self.dag.sprite_registry[conn_id].set_visible(True)
+
+                # Calculate new positions for all blocks
+        repositioning_animations = self._recalculate_all_positions()
+
+        # Create fade-in animations
+        fade_anims = [FadeInAnimation(sprite_id=block_id, duration=1.0)]
+        if parent_id:
+            conn_id = f"{parent_id}_to_{block_id}"
+            if conn_id in self.dag.sprite_registry:
+                fade_anims.append(FadeInAnimation(sprite_id=conn_id, duration=1.0))
+
+        return fade_anims + repositioning_animations
+
+    def _recalculate_all_positions(self):
+        """Recalculate positions and colors for all blocks based on current chain state"""
+        chains = self._build_chains_from_structure()
+        animations = []
+
+        if len(chains) <= 1:
+            # Single chain - all blocks at genesis Y and blue
+            target_y = self.genesis_y
+            target_color = (0, 0, 255)  # Blue
+            for chain in chains:
+                for block_id in chain:
+                    if block_id in self.visible_blocks:
+                        animations.extend(self._move_block_and_children(block_id, target_y))
+                        animations.extend(self._color_block_and_children(block_id, target_color))
+        else:
+            # Multiple chains - apply fork positioning and coloring logic
+            chain_lengths = [len([b for b in chain if b in self.visible_blocks]) for chain in chains]
+            max_length = max(chain_lengths) if chain_lengths else 0
+
+            for i, chain in enumerate(chains):
+                visible_chain_blocks = [b for b in chain if b in self.visible_blocks]
+                if not visible_chain_blocks:
+                    continue
+
+                chain_length = len(visible_chain_blocks)
+
+                if chain_length == max_length:
+                    if chain_lengths.count(max_length) > 1:
+                        # Equal length chains - half offset positioning, both blue
+                        target_y = self.genesis_y + (self.half_offset if i == 0 else -self.half_offset)
+                        target_color = (0, 0, 255)  # Blue for equal chains
+                    else:
+                        # Longest chain goes to genesis, blue color
+                        target_y = self.genesis_y
+                        target_color = (0, 0, 255)  # Blue for longest chain
+                else:
+                    # Shorter chain gets full offset, red color
+                    target_y = self.genesis_y - self.fork_offset
+                    target_color = (255, 0, 0)  # Red for shorter chain
+
+                for block_id in visible_chain_blocks:
+                    animations.extend(self._move_block_and_children(block_id, target_y))
+                    animations.extend(self._color_block_and_children(block_id, target_color))
+
+        return animations
+
+    def _build_chains_from_structure(self):
+        """Build chains based on parent-child structure, not just visible blocks"""
+        # Find blocks that have multiple children (fork points)
+        fork_points = []
+        for block_id, children in self.block_children.items():
+            if len(children) > 1:
+                fork_points.append(block_id)
+
+        if not fork_points:
+            # No forks - single chain
+            return [list(self.visible_blocks)]
+
+            # Build separate chains from each fork point
+        chains = []
+        for fork_point in fork_points:
+            children = self.block_children[fork_point]
+            for child in children:
+                chain = self._build_chain_from_block(child)
+                if chain:
+                    chains.append(chain)
+
+        return chains
+
+    def _build_chain_from_block(self, start_block):
+        """Build a chain starting from a specific block"""
+        chain = [start_block]
+        current = start_block
+
+        # Follow the chain through children
+        while True:
+            children = self.block_children.get(current, [])
+            if len(children) == 1:
+                current = children[0]
+                chain.append(current)
+            else:
+                break  # Multiple children or no children - end of chain
+
+        return chain
+
+    def _move_block_and_children(self, block_id, target_y):
+        """Move a block and all its children (including invisible ones) to target Y"""
+        animations = []
+
+        # Move the block itself if it exists
+        if block_id in self.dag.blocks:
+            current_pos = self.dag.blocks[block_id].grid_pos
+            new_pos = (current_pos[0], target_y)
+            move_anim = self.dag.move_to(block_id, new_pos, duration=2.0)
+            if move_anim:
+                move_anim.delay = 0.0  # Remove delay for consistent pacing
+                animations.append(move_anim)
+
+                # Move all children recursively
+        children = self.block_children.get(block_id, [])
+        for child_id in children:
+            animations.extend(self._move_block_and_children(child_id, target_y))
+
+        return animations
+
+    def _color_block_and_children(self, block_id, target_color):
+        """Color a block and all its children (including invisible ones)"""
+        animations = []
+
+        # Color the block itself if it exists
+        if block_id in self.dag.blocks:
+            color_anim = self.dag.change_color(block_id, target_color, duration=2.0)
+            if color_anim:
+                color_anim.delay = 0.0  # Remove delay for consistent pacing
+                animations.append(color_anim)
+
+                # Color all children recursively
+        children = self.block_children.get(block_id, [])
+        for child_id in children:
+            animations.extend(self._color_block_and_children(child_id, target_color))
+
+        return animations
 
 
 class BitcoinDAG(BlockDAG):
-    """Unified Bitcoin DAG that handles both consensus logic and visual rendering with automatic reorganization."""
+    """Unified Bitcoin DAG that handles both consensus logic and visual rendering with integrated ForkPositionManager."""
 
     def __init__(self, consensus_type: str, scene=None, spacing_multiplier=2, **kwargs):
         # Extract scene from kwargs if not provided as positional arg
@@ -26,8 +198,15 @@ class BitcoinDAG(BlockDAG):
         self.logical_blocks: Dict[str, ConsensusBlock] = {}
         self.creation_order: List[str] = []
 
+        # Integrated fork position manager
+        self.fork_position_manager = ForkPositionManager(
+            dag=self,
+            genesis_y=self.genesis_pos[1],
+            fork_offset=self.fork_vertical_offset
+        )
+
     def add_bitcoin_block(self, block_id: str, parent_id: str = None, label: str = None, **kwargs):
-        """Add a Bitcoin block with automatic reorganization detection."""
+        """Add a Bitcoin block with automatic reorganization detection using ForkPositionManager."""
         # Phase 1: Create logical block
         parents = [parent_id] if parent_id else []
         logical_block = ConsensusBlockFactory.create_block(
@@ -38,6 +217,9 @@ class BitcoinDAG(BlockDAG):
         logical_block.creation_order = len(self.creation_order)
         self.logical_blocks[block_id] = logical_block
         self.creation_order.append(block_id)
+
+        # Register with fork position manager
+        self.fork_position_manager.register_block(block_id, parent_id)
 
         # Calculate consensus data
         logical_block.calculate_consensus_data(0, self.logical_blocks)
@@ -50,175 +232,136 @@ class BitcoinDAG(BlockDAG):
             position = self.calculate_block_position(logical_block)
             position = (position[0], self.genesis_pos[1] - self.fork_vertical_offset)
         else:
-            # Regular blocks: use standard positioning initially, will be adjusted by deferred animation
+            # Regular blocks: use standard positioning initially
             position = self.calculate_block_position(logical_block)
 
-            # Phase 3: Create visual representation
+            # Phase 3: Create visual representation (initially hidden)
         kwargs['consensus_type'] = 'bitcoin'
         animations = super().add(block_id, position, label=label or block_id,
                                  parents=parents, **kwargs)
 
-        # Phase 4: Add deferred positioning for non-fork blocks to inherit parent Y
-        if not is_fork_block and parent_id and parent_id in self.blocks:
-            # Create a deferred move animation that will position at parent's Y at render time
-            parent_y_inherit = DeferredMoveAnimation(
-                sprite_id=block_id,
-                offset=(0, 0),  # Will be calculated to match parent's Y
-                duration=0.01  # Very short duration for immediate positioning
-            )
+        # Hide block initially for dynamic reveal
+        if block_id in self.blocks:
+            self.blocks[block_id].set_alpha(0)
+            self.blocks[block_id].set_visible(False)
 
-            # Override the offset calculation to inherit parent's Y position
-            def calculate_parent_y_offset():
-                if parent_id in self.blocks:
-                    parent_block = self.blocks[parent_id]
-                    current_block = self.blocks[block_id]
-                    # Calculate offset needed to match parent's Y
-                    y_offset = parent_block.grid_pos[1] - current_block.grid_pos[1]
-                    return (0, y_offset)
-                return (0, 0)
+            # Hide connections initially
+        if parent_id:
+            conn_id = f"{parent_id}_to_{block_id}"
+            if conn_id in self.sprite_registry:
+                self.sprite_registry[conn_id].set_alpha(0)
+                self.sprite_registry[conn_id].set_visible(False)
 
-                # Store the calculation function for the animation handler to use
-
-            parent_y_inherit.calculate_offset = calculate_parent_y_offset
-            animations.append(parent_y_inherit)
-
-            # Phase 5: Handle reorganization logic
-        if is_fork_block:
-            # Get the fork chain and main chain
-            fork_chain = self._get_fork_chain(block_id)
-            main_chain = self.chain_blocks[1:].copy()  # Exclude genesis
-
-            fork_length = len(fork_chain)
-            main_length = len(main_chain)
-
-            print(f"DEBUG: Fork chain length: {fork_length}, Main chain length: {main_length}")
-            print(f"DEBUG: Fork chain: {fork_chain}, Main chain: {main_chain}")
-
-            # Find the fork point (common ancestor)
-            fork_point = self._find_fork_point(fork_chain, main_chain)
-            print(f"DEBUG: Fork point: {fork_point}")
-
-            # Apply your desired positioning logic (including equal height case)
-            reorganize_animations = self._reorganize_with_equal_height_logic(
-                fork_chain, main_chain, fork_length, main_length, fork_point
-            )
-
-            return animations + reorganize_animations
-        else:
-            # Regular block on main chain
+                # Phase 4: Handle chain tracking
+        if not is_fork_block:
             self._update_chain_tracking(logical_block)
 
         return animations
 
-    def _reorganize_with_equal_height_logic(self, fork_chain: List[str], main_chain: List[str],
-                                            fork_length: int, main_length: int, fork_point: str):
-        """Reorganize based on chain length comparison, only moving blocks after fork point."""
-        animations = []
-        delay = 1.0
+    def reveal_block(self, block_id: str):
+        """Reveal a block using the integrated ForkPositionManager"""
+        return self.fork_position_manager.reveal_block(block_id)
 
-        genesis_y = self.genesis_pos[1]
-        half_offset = self.fork_vertical_offset / 2  # Half spacing for equal positioning
+    def create_dynamic_block_race(self, race_length=5, fork_at_block=1):
+        """Create a dynamic block race structure"""
+        blocks_to_create = []
+        blocks_to_reveal = []
 
-        # Get only the competing blocks (after fork point)
-        competing_fork_blocks = self._get_blocks_after_fork_point(fork_chain, fork_point)
-        competing_main_blocks = self._get_blocks_after_fork_point(main_chain, fork_point)
+        # Genesis and initial chain
+        blocks_to_create.append(("Genesis", None, (10, 25)))
+        blocks_to_reveal.append("Genesis")
 
-        print(f"DEBUG: Competing fork blocks: {competing_fork_blocks}")
-        print(f"DEBUG: Competing main blocks: {competing_main_blocks}")
+        # Blocks before fork
+        for i in range(1, fork_at_block + 1):
+            block_id = f"Block{i}"
+            parent_id = f"Block{i - 1}" if i > 1 else "Genesis"
+            pos = (10 + i * 10, 25)
+            blocks_to_create.append((block_id, parent_id, pos))
+            blocks_to_reveal.append(block_id)
 
-        if fork_length == main_length:
-            # Both chains equal height: both offset equally from genesis Y
-            print("DEBUG: Equal height chains - both offset equally from genesis")
+            # Racing blocks
+        fork_parent = f"Block{fork_at_block}"
+        for i in range(race_length):
+            block_num = fork_at_block + i + 1
 
-            # Move main chain competing blocks up (half offset above genesis)
-            main_target_y = genesis_y + half_offset
-            for block_id in competing_main_blocks:
-                if block_id in self.blocks:
-                    current_pos = self.blocks[block_id].grid_pos
-                    new_pos = (current_pos[0], main_target_y)
-                    move_anim = self.move_to(block_id, new_pos, duration=2.0)
-                    move_anim.delay = delay
-                    animations.append(move_anim)
+            # Chain A block
+            block_a_id = f"Block{block_num}A"
+            parent_a = f"Block{block_num - 1}A" if i > 0 else fork_parent
+            pos_a = (10 + block_num * 10, 25)
+            blocks_to_create.append((block_a_id, parent_a, pos_a))
+            blocks_to_reveal.append(block_a_id)
 
-                    # Move fork chain competing blocks down (half offset below genesis)
-            fork_target_y = genesis_y - half_offset
-            for block_id in competing_fork_blocks:
-                if block_id in self.blocks:
-                    current_pos = self.blocks[block_id].grid_pos
-                    new_pos = (current_pos[0], fork_target_y)
-                    move_anim = self.move_to(block_id, new_pos, duration=2.0)
-                    move_anim.delay = delay
-                    animations.append(move_anim)
+            # Chain B block
+            block_b_id = f"Block{block_num}B"
+            parent_b = f"Block{block_num - 1}B" if i > 0 else fork_parent
+            pos_b = (10 + block_num * 10, 25 - 8)
+            blocks_to_create.append((block_b_id, parent_b, pos_b))
+            blocks_to_reveal.append(block_b_id)
 
-        elif fork_length > main_length:
-            # Fork is longer: fork at genesis Y, main chain offset away
-            print("DEBUG: Fork is longer - fork to genesis, main chain offset")
+            # Winner block (extends chain A)
+        winner_id = f"Block{fork_at_block + race_length + 1}A"
+        winner_parent = f"Block{fork_at_block + race_length}A"
+        winner_pos = (10 + (fork_at_block + race_length + 1) * 10, 25)
+        blocks_to_create.append((winner_id, winner_parent, winner_pos))
+        blocks_to_reveal.append(winner_id)
 
-            # Move fork chain competing blocks to genesis Y (becomes main)
-            for block_id in competing_fork_blocks:
-                if block_id in self.blocks:
-                    current_pos = self.blocks[block_id].grid_pos
-                    new_pos = (current_pos[0], genesis_y)
-                    move_anim = self.move_to(block_id, new_pos, duration=2.0)
-                    move_anim.delay = delay
-                    animations.append(move_anim)
+        # Create all blocks
+        for block_id, parent_id, pos in blocks_to_create:
+            self.add_bitcoin_block(block_id, parent_id)
 
-                    # Move original main chain competing blocks away (full offset above genesis)
-            orphan_target_y = genesis_y + self.fork_vertical_offset
-            for block_id in competing_main_blocks:
-                if block_id in self.blocks:
-                    current_pos = self.blocks[block_id].grid_pos
-                    new_pos = (current_pos[0], orphan_target_y)
-                    move_anim = self.move_to(block_id, new_pos, duration=2.0)
-                    move_anim.delay = delay
-                    # Fade orphaned blocks
-                    fade_anim = self.fade_to(block_id, 180, duration=2.0)
-                    fade_anim.delay = delay
-                    animations.extend([move_anim, fade_anim])
+        return blocks_to_reveal
 
-                    # Update chain tracking - fork becomes main chain
-            self.chain_blocks = ["Genesis"] + fork_chain
+        # Enhanced selfish mining support
 
-            # Note: fork_length < main_length case doesn't trigger reorganization
-        # The fork stays in its offset position
+    def create_hidden_fork_blocks(self, fork_point_id, num_blocks=3, opacity=127):
+        """Create hidden fork blocks for selfish mining demonstrations"""
+        if fork_point_id not in self.blocks:
+            raise ValueError(f"Fork point {fork_point_id} not found")
 
-        return animations
+        hidden_fork_blocks = []
+        hidden_animations = []
 
-    def _find_fork_point(self, fork_chain: List[str], main_chain: List[str]) -> str:
-        """Find the common ancestor where the chains diverge."""
-        # Build full chains including genesis for proper comparison
-        full_main_chain = ["Genesis"] + main_chain
-        full_fork_chain = ["Genesis"] + fork_chain
+        for i in range(1, num_blocks + 1):
+            fork_block_id = f"SelfishFork_{i}"
+            parent_id = fork_point_id if i == 1 else f"SelfishFork_{i - 1}"
 
-        # Find the last common block by comparing from genesis forward
-        fork_point = "Genesis"
-        min_length = min(len(full_main_chain), len(full_fork_chain))
+            # Add block using our enhanced system
+            animations = self.add_bitcoin_block(fork_block_id, parent_id, label=f"SF{i}")
+            hidden_fork_blocks.append(fork_block_id)
 
-        for i in range(min_length):
-            if full_main_chain[i] == full_fork_chain[i]:
-                fork_point = full_main_chain[i]
-            else:
-                break
+            # Set to reduced opacity for hidden state
+            if fork_block_id in self.blocks:
+                self.blocks[fork_block_id].set_alpha(opacity)
+                self.blocks[fork_block_id].set_visible(True)
 
-        print(f"DEBUG: Fork point identified as: {fork_point}")
-        return fork_point
+        return hidden_fork_blocks, hidden_animations
 
-    def _get_blocks_after_fork_point(self, chain: List[str], fork_point: str) -> List[str]:
-        """Get only the blocks that come after the fork point in a chain."""
-        if fork_point == "Genesis":
-            return chain  # All blocks are after genesis
+    def reveal_selfish_mining_attack(self, hidden_fork_blocks):
+        """Reveal selfish mining attack using ForkPositionManager"""
+        reveal_animations = []
 
-        # Find the fork point in the full chain (including genesis)
-        full_chain = ["Genesis"] + chain
-        try:
-            fork_index = full_chain.index(fork_point)
-            # Return only blocks after the fork point
-            competing_blocks = full_chain[fork_index + 1:]
-            print(f"DEBUG: Blocks after {fork_point}: {competing_blocks}")
-            return competing_blocks
-        except ValueError:
-            print(f"DEBUG: Fork point {fork_point} not found in chain, returning all blocks")
-            return chain
+        # Reveal all hidden fork blocks sequentially
+        for block_id in hidden_fork_blocks:
+            # Make blocks fully visible and add to fork manager's visible set
+            if block_id in self.blocks:
+                self.blocks[block_id].set_alpha(255)
+                self.fork_position_manager.visible_blocks.add(block_id)
+
+                # Make connections visible
+                parent_id = self.fork_position_manager.block_parents.get(block_id)
+                if parent_id:
+                    conn_id = f"{parent_id}_to_{block_id}"
+                    if conn_id in self.sprite_registry:
+                        self.sprite_registry[conn_id].set_visible(True)
+                        self.sprite_registry[conn_id].set_alpha(255)
+
+                        # Trigger repositioning using fork manager logic
+        repositioning_animations = self.fork_position_manager._recalculate_all_positions()
+        reveal_animations.extend(repositioning_animations)
+
+        return reveal_animations
+
+        # Keep all existing utility methods from original implementation
 
     def calculate_block_position(self, block: ConsensusBlock) -> Tuple[float, float]:
         """Calculate position based on Bitcoin chain height."""
@@ -241,40 +384,6 @@ class BitcoinDAG(BlockDAG):
             self.chain_blocks = [block.block_id]
         else:
             self.chain_blocks.append(block.block_id)
-
-    def _calculate_fork_chain_length(self, block_id: str) -> int:
-        """Calculate the length of the chain ending at block_id."""
-        length = 0
-        current = block_id
-
-        while current and current in self.logical_blocks:
-            length += 1
-            logical_block = self.logical_blocks[current]
-            if logical_block.parents:
-                current = logical_block.parents[0]
-            else:
-                break
-
-        return length
-
-    def _get_fork_chain(self, tip_block_id: str) -> List[str]:
-        """Get the chain of blocks from genesis to tip_block_id."""
-        chain = []
-        current = tip_block_id
-
-        while current and current in self.logical_blocks:
-            chain.append(current)
-            logical_block = self.logical_blocks[current]
-            if logical_block.parents:
-                current = logical_block.parents[0]
-            else:
-                break
-
-                # Reverse to get genesis-to-tip order, exclude genesis
-        chain.reverse()
-        return [block for block in chain if block != "Genesis"]
-
-        # Keep all the existing utility methods unchanged
 
     def get_chain_tip(self) -> Optional[str]:
         """Get the current tip of the Bitcoin chain."""
@@ -302,7 +411,6 @@ class BitcoinDAG(BlockDAG):
 
     def validate_dag_integrity(self) -> bool:
         """Validate Bitcoin chain structure and consensus rules."""
-        # Validate logical structure
         for block_id, block in self.logical_blocks.items():
             if not block.validate_parents(self.logical_blocks):
                 return False

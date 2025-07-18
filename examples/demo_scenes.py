@@ -12,7 +12,8 @@ from blockanimator.rendering.consensus_scene_adapter import ConsensusSceneAdapte
 from blockanimator.consensus.dags.ghostdag import GhostdagDAG
 from blockanimator.rendering.visual_dag_renderer import VisualDAGRenderer
 from blockanimator.consensus.dags.nakamoto_consensus.bitcoin_dag import BitcoinDAG
-from blockanimator.animation import FadeInAnimation
+from blockanimator.animation import FadeInAnimation, ChangeAppearanceAnimation, MoveToAnimation
+
 
 # Stress Test with 50 blocks, multiple parents per block, movement, movement while color and opacity changes
 # set Resolution and FPS to see how fast rendering is on your computer, mp4 output is 61 seconds.
@@ -2022,7 +2023,7 @@ def create_dynamic_block_race(scene, race_length=5, fork_at_block=1):
 
 class DynamicBlockRaceScene(Scene):
     def __init__(self, race_length=5):
-        super().__init__(resolution="1080p", fps=60)
+        super().__init__(resolution="480p", fps=15)
         self.race_length = race_length
 
     def construct(self):
@@ -2036,3 +2037,181 @@ class DynamicBlockRaceScene(Scene):
             self.play(animations)
 
         self.wait(2)
+
+# tested ok  # TODO remove examples from above after verifying this did not break anything in consensus/dags/nc/bitcoindag
+class BitcoinBlockRaceScene(Scene):
+    def __init__(self, race_length=5):
+        super().__init__(resolution="480p", fps=15)
+
+    def construct(self):
+        bitcoin_dag = BitcoinDAG(consensus_type="bitcoin", scene=self)
+
+        # Create the race structure
+        reveal_sequence = bitcoin_dag.create_dynamic_block_race(race_length=3, fork_at_block=1)
+
+        # Reveal blocks sequentially with automatic repositioning
+        for block_id in reveal_sequence:
+            animations = bitcoin_dag.reveal_block(block_id)
+            self.play(animations)
+
+# restart selfish testing # works, TODO clean up and move to BitcoinDAG
+class SelfishMiningScene(Scene):
+    def __init__(self):
+        super().__init__(resolution="720p", fps=30)
+
+    def construct(self):
+        # Create basic BlockDAG
+        dag = BlockDAG(scene=self)
+
+        # Phase 1: Create all blocks at 0% opacity (completely hidden)
+        blocks_to_create = [
+            # Honest chain
+            ("Genesis", None, (10, 25)),
+            ("Block1", ["Genesis"], (20, 25)),
+            ("Block2", ["Block1"], (30, 25)),
+            ("Block3", ["Block2"], (40, 25)),
+
+            # Selfish fork - positioned parallel to competing honest blocks
+            ("SelfishBlock1", ["Block1"], (30, 15)),  # Competes with Block2
+            ("SelfishBlock2", ["SelfishBlock1"], (40, 15)),  # Competes with Block3
+            ("SelfishBlock3", ["SelfishBlock2"], (50, 15)),  # Extends beyond honest chain
+        ]
+
+        # Create all blocks initially hidden
+        for block_id, parents, pos in blocks_to_create:
+            # Set color based on block type
+            if block_id.startswith("Selfish"):
+                color = (255, 0, 0)  # Red for selfish blocks
+            else:
+                color = (0, 0, 255)  # Blue for honest blocks (default)
+
+            animations = dag.add(block_id, pos, parents=parents, consensus_type='bitcoin', color=color)
+
+            if block_id in dag.blocks:
+                dag.blocks[block_id].set_alpha(0)
+                dag.blocks[block_id].set_visible(False)
+
+            if parents:
+                for parent_id in parents:
+                    conn_id = f"{parent_id}_to_{block_id}"
+                    if conn_id in dag.sprite_registry:
+                        dag.sprite_registry[conn_id].set_alpha(0)
+                        dag.sprite_registry[conn_id].set_visible(False)
+
+                        # Phase 2: Interleaved reveal pattern
+        # Genesis first
+        self._reveal_block(dag, "Genesis", 255)
+
+        # Block1 + its connection
+        self._reveal_block_with_connection(dag, "Block1", "Genesis", 255)
+
+        # Block2 and SelfishBlock1 together (competing blocks)
+        self._reveal_block_with_connection(dag, "Block2", "Block1", 255)
+        self._reveal_block_with_connection(dag, "SelfishBlock1", "Block1", 128)  # 50% opacity
+
+        # Block3 and SelfishBlock2 together
+        self._reveal_block_with_connection(dag, "Block3", "Block2", 255)
+        self._reveal_block_with_connection(dag, "SelfishBlock2", "SelfishBlock1", 128)
+
+        # Final selfish block (extending beyond honest chain)
+        self._reveal_block_with_connection(dag, "SelfishBlock3", "SelfishBlock2", 128)
+
+        self.wait(1)
+
+        # Phase 3: Fade selfish chain to full opacity, then displace both chains
+        reveal_animations = []
+
+        # Make selfish chain fully visible
+        selfish_chain = ["SelfishBlock1", "SelfishBlock2", "SelfishBlock3"]
+        for block_id in selfish_chain:
+            if block_id in dag.blocks:
+                reveal_animations.append(ChangeAppearanceAnimation(
+                    sprite_id=block_id,
+                    target_alpha=255,  # Full opacity
+                    duration=1.5
+                ))
+
+                # Make selfish chain connections fully visible
+        for i, block_id in enumerate(selfish_chain):
+            if i == 0:
+                conn_id = f"Block1_to_{block_id}"
+            else:
+                parent_id = selfish_chain[i - 1]
+                conn_id = f"{parent_id}_to_{block_id}"
+
+            if conn_id in dag.sprite_registry:
+                reveal_animations.append(ChangeAppearanceAnimation(
+                    sprite_id=conn_id,
+                    target_alpha=255,
+                    duration=1.5
+                ))
+
+                # Play the reveal animations first
+        self.play(reveal_animations)
+
+        # Phase 4: Displace only competing blocks upward
+        displacement_animations = []
+        y_offset = 10  # Move competing chains up
+
+        # Only move honest blocks that compete with selfish blocks
+        competing_honest_blocks = ["Block2", "Block3"]  # These compete with SelfishBlock1, SelfishBlock2
+        for block_id in competing_honest_blocks:
+            if block_id in dag.blocks:
+                current_pos = dag.blocks[block_id].grid_pos
+                new_pos = (current_pos[0], current_pos[1] + y_offset)
+                displacement_animations.append(MoveToAnimation(
+                    sprite_id=block_id,
+                    target_grid_x=new_pos[0],
+                    target_grid_y=new_pos[1],
+                    duration=2.0
+                ))
+
+                # Move selfish chain blocks up (same as before)
+        for block_id in selfish_chain:
+            if block_id in dag.blocks:
+                current_pos = dag.blocks[block_id].grid_pos
+                new_pos = (current_pos[0], current_pos[1] + y_offset)
+                displacement_animations.append(MoveToAnimation(
+                    sprite_id=block_id,
+                    target_grid_x=new_pos[0],
+                    target_grid_y=new_pos[1],
+                    duration=2.0
+                ))
+
+                # Play the displacement animations
+        self.play(displacement_animations)
+        self.wait(3)
+
+    def _reveal_block(self, dag, block_id, alpha):
+        """Helper to reveal a single block"""
+        if block_id in dag.blocks:
+            dag.blocks[block_id].set_visible(True)
+            fade_anim = ChangeAppearanceAnimation(
+                sprite_id=block_id,
+                target_alpha=alpha,
+                duration=1.0
+            )
+            self.play([fade_anim])
+
+    def _reveal_block_with_connection(self, dag, block_id, parent_id, alpha):
+        """Helper to reveal a block and its connection simultaneously"""
+        animations = []
+
+        if block_id in dag.blocks:
+            dag.blocks[block_id].set_visible(True)
+            animations.append(ChangeAppearanceAnimation(
+                sprite_id=block_id,
+                target_alpha=alpha,
+                duration=1.0
+            ))
+
+        conn_id = f"{parent_id}_to_{block_id}"
+        if conn_id in dag.sprite_registry:
+            dag.sprite_registry[conn_id].set_visible(True)
+            animations.append(ChangeAppearanceAnimation(
+                sprite_id=conn_id,
+                target_alpha=alpha,
+                duration=1.0
+            ))
+
+        self.play(animations)
