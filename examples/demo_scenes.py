@@ -2055,7 +2055,7 @@ class BitcoinBlockRaceScene(Scene):
             self.play(animations)
 
 # restart selfish testing # works, TODO clean up and move to BitcoinDAG
-class SelfishMiningScene(Scene):
+class SelfishMiningSceneBefore(Scene):
     def __init__(self):
         super().__init__(resolution="720p", fps=30)
 
@@ -2098,23 +2098,23 @@ class SelfishMiningScene(Scene):
                         dag.sprite_registry[conn_id].set_alpha(0)
                         dag.sprite_registry[conn_id].set_visible(False)
 
-                        # Phase 2: Interleaved reveal pattern
+                        # Phase 2: Sequential reveal pattern - selfish blocks first
         # Genesis first
         self._reveal_block(dag, "Genesis", 255)
 
         # Block1 + its connection
         self._reveal_block_with_connection(dag, "Block1", "Genesis", 255)
 
-        # Block2 and SelfishBlock1 together (competing blocks)
+        # SelfishBlock1 FIRST, then Block2
+        self._reveal_block_with_connection(dag, "SelfishBlock1", "Block1", 80)  # 50% opacity
         self._reveal_block_with_connection(dag, "Block2", "Block1", 255)
-        self._reveal_block_with_connection(dag, "SelfishBlock1", "Block1", 128)  # 50% opacity
 
-        # Block3 and SelfishBlock2 together
+        # SelfishBlock2 FIRST, then Block3
+        self._reveal_block_with_connection(dag, "SelfishBlock2", "SelfishBlock1", 80)
         self._reveal_block_with_connection(dag, "Block3", "Block2", 255)
-        self._reveal_block_with_connection(dag, "SelfishBlock2", "SelfishBlock1", 128)
 
         # Final selfish block (extending beyond honest chain)
-        self._reveal_block_with_connection(dag, "SelfishBlock3", "SelfishBlock2", 128)
+        self._reveal_block_with_connection(dag, "SelfishBlock3", "SelfishBlock2", 80)
 
         self.wait(1)
 
@@ -2215,3 +2215,266 @@ class SelfishMiningScene(Scene):
             ))
 
         self.play(animations)
+
+
+class SelfishMiningAnimator:
+    """Handles all selfish mining animation logic"""
+
+    def __init__(self, scene):
+        self.scene = scene
+
+    def create_selfish_mining_blocks(self, dag, honest_blocks, selfish_blocks):
+        """Create all blocks initially hidden for selfish mining demo"""
+        all_blocks = honest_blocks + selfish_blocks
+
+        for block_id, parents, pos in all_blocks:
+            # Set color based on block type
+            color = (255, 0, 0) if block_id.startswith("Selfish") else (0, 0, 255)
+
+            # Create block using DAG's add method
+            animations = dag.add(block_id, pos, parents=parents, consensus_type='bitcoin', color=color)
+
+            # Hide blocks initially
+            if block_id in dag.blocks:
+                dag.blocks[block_id].set_alpha(0)
+                dag.blocks[block_id].set_visible(False)
+
+                # Hide connections initially
+            self._hide_connections(dag, block_id, parents)
+
+    def _hide_connections(self, dag, block_id, parents):
+        """Hide all connections for a block"""
+        if parents:
+            for parent_id in parents:
+                conn_id = f"{parent_id}_to_{block_id}"
+                if conn_id in dag.sprite_registry:
+                    dag.sprite_registry[conn_id].set_alpha(0)
+                    dag.sprite_registry[conn_id].set_visible(False)
+
+    def reveal_selfish_mining_sequence(self, dag, reveal_sequence):
+        """Reveal blocks in selfish mining order with specified opacities"""
+        for block_id, parent_id, alpha in reveal_sequence:
+            if parent_id:
+                self._reveal_block_with_connection(dag, block_id, parent_id, alpha)
+            else:
+                self._reveal_block(dag, block_id, alpha)
+
+    def _reveal_block(self, dag, block_id, alpha):
+        """Helper to reveal a single block"""
+        if block_id in dag.blocks:
+            dag.blocks[block_id].set_visible(True)
+            fade_anim = ChangeAppearanceAnimation(
+                sprite_id=block_id,
+                target_alpha=alpha,
+                duration=1.0
+            )
+            self.scene.play([fade_anim])
+
+    def _reveal_block_with_connection(self, dag, block_id, parent_id, alpha):
+        """Helper to reveal a block and its connection simultaneously"""
+        animations = []
+
+        if block_id in dag.blocks:
+            dag.blocks[block_id].set_visible(True)
+            animations.append(ChangeAppearanceAnimation(
+                sprite_id=block_id,
+                target_alpha=alpha,
+                duration=1.0
+            ))
+
+        conn_id = f"{parent_id}_to_{block_id}"
+        if conn_id in dag.sprite_registry:
+            dag.sprite_registry[conn_id].set_visible(True)
+            animations.append(ChangeAppearanceAnimation(
+                sprite_id=conn_id,
+                target_alpha=alpha,
+                duration=1.0
+            ))
+
+        self.scene.play(animations)
+
+    def reveal_and_displace_chains(self, dag, selfish_chain, competing_honest_blocks, y_offset=10):
+        """Complete reveal and displacement animation sequence"""
+        # Phase 1: Fade selfish chain to full opacity
+        reveal_animations = []
+
+        # Make selfish chain fully visible
+        for block_id in selfish_chain:
+            if block_id in dag.blocks:
+                reveal_animations.append(ChangeAppearanceAnimation(
+                    sprite_id=block_id,
+                    target_alpha=255,
+                    duration=1.5
+                ))
+
+                # Make selfish chain connections fully visible
+        for i, block_id in enumerate(selfish_chain):
+            if i == 0:
+                conn_id = f"Block1_to_{block_id}"
+            else:
+                parent_id = selfish_chain[i - 1]
+                conn_id = f"{parent_id}_to_{block_id}"
+
+            if conn_id in dag.sprite_registry:
+                reveal_animations.append(ChangeAppearanceAnimation(
+                    sprite_id=conn_id,
+                    target_alpha=255,
+                    duration=1.5
+                ))
+
+                # Play reveal animations
+        self.scene.play(reveal_animations)
+
+        # Phase 2: Displace competing chains
+        displacement_animations = self._create_displacement_animations(
+            dag, selfish_chain, competing_honest_blocks, y_offset
+        )
+
+        self.scene.play(displacement_animations)
+
+    def _create_displacement_animations(self, dag, selfish_chain, competing_honest_blocks, y_offset):
+        """Create displacement animations for both chains"""
+        displacement_animations = []
+
+        # Move honest blocks that compete with selfish blocks
+        for block_id in competing_honest_blocks:
+            if block_id in dag.blocks:
+                current_pos = dag.blocks[block_id].grid_pos
+                new_pos = (current_pos[0], current_pos[1] + y_offset)
+                displacement_animations.append(MoveToAnimation(
+                    sprite_id=block_id,
+                    target_grid_x=new_pos[0],
+                    target_grid_y=new_pos[1],
+                    duration=2.0
+                ))
+
+                # Move selfish chain blocks
+        for block_id in selfish_chain:
+            if block_id in dag.blocks:
+                current_pos = dag.blocks[block_id].grid_pos
+                new_pos = (current_pos[0], current_pos[1] + y_offset)
+                displacement_animations.append(MoveToAnimation(
+                    sprite_id=block_id,
+                    target_grid_x=new_pos[0],
+                    target_grid_y=new_pos[1],
+                    duration=2.0
+                ))
+
+        return displacement_animations
+
+    def create_dynamic_selfish_mining(self, dag, fork_point="Block1", selfish_length=3, honest_length=2):
+        """Dynamically create selfish mining scenario with configurable parameters"""
+        # Generate honest chain
+        honest_blocks = [("Genesis", None, (10, 25))]
+        for i in range(1, honest_length + 2):  # +2 to account for genesis and fork point
+            parent = "Genesis" if i == 1 else f"Block{i - 1}"
+            honest_blocks.append((f"Block{i}", [parent], (10 + i * 10, 25)))
+
+            # Generate selfish fork starting from fork point
+        selfish_blocks = []
+        fork_start_x = 30  # Starting x position for selfish blocks
+        for i in range(1, selfish_length + 1):
+            parent = [fork_point] if i == 1 else [f"SelfishBlock{i - 1}"]
+            selfish_blocks.append((f"SelfishBlock{i}", parent, (fork_start_x + (i - 1) * 10, 15)))
+
+        return honest_blocks, selfish_blocks
+
+
+class SelfishMiningScene(Scene):
+    """Clean demo scene using the refactored selfish mining animator"""
+
+    def __init__(self):
+        super().__init__(resolution="480p", fps=15)
+        self.animator = SelfishMiningAnimator(self)
+
+    def construct(self):
+        # Create basic BlockDAG
+        dag = BlockDAG(scene=self)
+
+        # Define block structures - can be made dynamic
+        honest_blocks = [
+            ("Genesis", None, (10, 25)),
+            ("Block1", ["Genesis"], (20, 25)),
+            ("Block2", ["Block1"], (30, 25)),
+            ("Block3", ["Block2"], (40, 25)),
+        ]
+
+        selfish_blocks = [
+            ("SelfishBlock1", ["Block1"], (30, 15)),
+            ("SelfishBlock2", ["SelfishBlock1"], (40, 15)),
+            ("SelfishBlock3", ["SelfishBlock2"], (50, 15)),
+        ]
+
+        # Phase 1: Create all blocks initially hidden
+        self.animator.create_selfish_mining_blocks(dag, honest_blocks, selfish_blocks)
+
+        # Phase 2: Sequential reveal pattern
+        reveal_sequence = [
+            ("Genesis", None, 255),
+            ("Block1", "Genesis", 255),
+            ("SelfishBlock1", "Block1", 80),  # Selfish first
+            ("Block2", "Block1", 255),  # Then honest
+            ("SelfishBlock2", "SelfishBlock1", 80),
+            ("Block3", "Block2", 255),
+            ("SelfishBlock3", "SelfishBlock2", 80),
+        ]
+
+        self.animator.reveal_selfish_mining_sequence(dag, reveal_sequence)
+        self.wait(1)
+
+        # Phase 3: Full reveal and displacement
+        selfish_chain = ["SelfishBlock1", "SelfishBlock2", "SelfishBlock3"]
+        competing_honest_blocks = ["Block2", "Block3"]
+
+        self.animator.reveal_and_displace_chains(dag, selfish_chain, competing_honest_blocks)
+        self.wait(3)
+
+    # Alternative dynamic usage example
+
+
+class DynamicSelfishMiningScene(Scene):
+    """Example showing dynamic generation of selfish mining scenarios"""
+
+    def __init__(self, selfish_length=4, honest_length=3):
+        super().__init__(resolution="480p", fps=15)
+        self.animator = SelfishMiningAnimator(self)
+        self.selfish_length = selfish_length
+        self.honest_length = honest_length
+
+    def construct(self):
+        dag = BlockDAG(scene=self)
+
+        # Dynamically generate block structures
+        honest_blocks, selfish_blocks = self.animator.create_dynamic_selfish_mining(
+            dag, fork_point="Block1",
+            selfish_length=self.selfish_length,
+            honest_length=self.honest_length
+        )
+
+        # Create and animate
+        self.animator.create_selfish_mining_blocks(dag, honest_blocks, selfish_blocks)
+
+        # Generate dynamic reveal sequence
+        reveal_sequence = [("Genesis", None, 255), ("Block1", "Genesis", 255)]
+
+        # Alternate between selfish and honest reveals
+        for i in range(1, max(self.selfish_length, self.honest_length) + 1):
+            if i <= self.selfish_length:
+                parent = "Block1" if i == 1 else f"SelfishBlock{i - 1}"
+                reveal_sequence.append((f"SelfishBlock{i}", parent, 80))
+
+            if i + 1 <= self.honest_length + 1:  # +1 for Block1 already added
+                parent = f"Block{i}" if i > 1 else "Block1"
+                if i + 1 <= self.honest_length + 1:
+                    reveal_sequence.append((f"Block{i + 1}", parent, 255))
+
+        self.animator.reveal_selfish_mining_sequence(dag, reveal_sequence)
+        self.wait(1)
+
+        # Final reveal and displacement
+        selfish_chain = [f"SelfishBlock{i}" for i in range(1, self.selfish_length + 1)]
+        competing_honest = [f"Block{i}" for i in range(2, self.honest_length + 2)]
+
+        self.animator.reveal_and_displace_chains(dag, selfish_chain, competing_honest)
+        self.wait(3)
+
