@@ -2,7 +2,7 @@
 
 from typing import List, Dict, Any
 import pygame
-from ..animation import Animation, FadeInAnimation, MoveToAnimation
+from ..animation import Animation, FadeToAnimation, MoveToAnimation
 from ..sprites.block import Block, GhostdagBlock, BitcoinBlock
 from ..sprites.connection import Connection
 from ..consensus.dags.consensus_dags import ConsensusDAG
@@ -49,15 +49,14 @@ class VisualDAGRenderer:
         self.sprites.add(visual_sprite, layer=self.BLOCK_LAYER)
         self.scene._block_positions[block_id] = grid_pos
 
-        # 5. Create animations starting with block fade-in
-        animations = [FadeInAnimation(sprite_id=block_id, duration=1.0)]
+        # 5. Create animations starting with block fade-in using FadeToAnimation
+        animations = [FadeToAnimation(sprite_id=block_id, target_alpha=255, duration=1.0)]
 
-        # 6. Add parent connections with animations
+        # 6. Create parent connections but don't animate them
         if logical_block.parents:
-            connection_animations = self._create_parent_connections(logical_block)
-            animations.extend(connection_animations)
+            self._create_parent_connections(logical_block)  # Creates connections but returns no animations
 
-            # 7. Add layer adjustment animations if this is a GHOSTDAG
+        # 7. Add layer adjustment animations if this is a GHOSTDAG
         if hasattr(logical_block, 'metadata') and 'affected_layers' in logical_block.metadata:
             adjustment_animations = self.logical_dag._adjust_layer_positions(
                 logical_block.metadata['affected_layers']
@@ -94,7 +93,7 @@ class VisualDAGRenderer:
 
                     animations.append(MoveToAnimation(
                         sprite_id=block_id,
-                        target_grid_x=base_x,  # Now matches DAG positioning
+                        target_grid_x=base_x,
                         target_grid_y=new_y,
                         duration=1.0
                     ))
@@ -139,18 +138,18 @@ class VisualDAGRenderer:
 
         for parent_id in logical_block.parents:
             if parent_id in self.sprite_registry:
-                connection_id = f"{logical_block.block_id}_to_{parent_id}"  # Updated naming
+                connection_id = f"{logical_block.block_id}_to_{parent_id}"
 
                 # Create connection with consensus-specific styling
                 connection_kwargs = self._get_connection_style(logical_block, parent_id)
 
-                # Swap the order: child block first, parent block second
+                # Create the connection but don't animate it directly
                 connection = self._create_connection(
                     connection_id, logical_block.block_id, parent_id, **connection_kwargs
                 )
 
-                if connection:
-                    animations.append(FadeInAnimation(sprite_id=connection_id))
+                # Remove the FadeToAnimation - connections will follow block alpha automatically
+                # No animation needed here since connections use observer pattern
 
         return animations
 

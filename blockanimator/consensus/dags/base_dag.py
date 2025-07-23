@@ -1,7 +1,7 @@
 # BlockAnimator\blockanimator\consensus\base_dag.py
 
 import pygame
-from blockanimator.animation import FadeInAnimation, FadeToAnimation, MoveToAnimation, ColorChangeAnimation
+from blockanimator.animation import FadeToAnimation, MoveToAnimation, ColorChangeAnimation
 from blockanimator.sprites.block import Block
 from blockanimator.sprites.connection import Connection
 from blockanimator.consensus.dag_types import StyledParent
@@ -134,9 +134,10 @@ class BlockDAG:
         # Store in scene for camera targeting
         self.scene._block_positions[block_id] = self.blocks[block_id].grid_pos
 
-        # Create animations list - start with block fade-in
-        animations = [FadeInAnimation(
+        # Create animations list - start with block fade-in using FadeToAnimation
+        animations = [FadeToAnimation(
             sprite_id=block_id,
+            target_alpha=255,
             duration=1.0
         )]
 
@@ -169,9 +170,10 @@ class BlockDAG:
 
                     self.add_connection(connection_id, block_id, parent_id, **connection_kwargs)
 
-                    # Add connection fade-in animation
-                    animations.append(FadeInAnimation(
-                        sprite_id=connection_id
+                    # Add connection fade-in animation using FadeToAnimation
+                    animations.append(FadeToAnimation(
+                        sprite_id=connection_id,
+                        target_alpha=255
                     ))
 
                     # After successfully adding the block, update history
@@ -317,9 +319,10 @@ class BlockDAG:
                 connection_id, from_block_id, to_block_id, **kwargs
             )
 
-            # Return fade-in animation for the connection
-            return FadeInAnimation(
-                sprite_id=connection_id
+            # Return fade-in animation for the connection using FadeToAnimation
+            return FadeToAnimation(
+                sprite_id=connection_id,
+                target_alpha=255
             )
         return None
 

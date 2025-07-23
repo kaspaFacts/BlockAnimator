@@ -18,15 +18,12 @@ __all__ = [
     'Animation',
     'AnimationType',
     'AnimationState',
-    'FadeInAnimation',
-    'FadeOutAnimation',
     'MoveToAnimation',
     'ColorChangeAnimation',
-    'AlphaChangeAnimation',
     'CameraMoveAnimation',
     'FadeToAnimation',
-    'ChangeAppearanceAnimation',
     'WaitAnimation',
+    'RelativeMoveAnimation',
 
     # Group classes and functions
     'TimelineEvent',

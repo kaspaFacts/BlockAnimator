@@ -1,7 +1,7 @@
 # BlockAnimator\blockanimator\consensus\visual_block.py
 
 import pygame
-
+from blockanimator.animation import BlockAnimationProxy
 
 class VisualBlock(pygame.sprite.Sprite):
     """Pure visual representation - references logical block"""
@@ -32,10 +32,20 @@ class VisualBlock(pygame.sprite.Sprite):
         # List of connections observing this block's alpha
         self.alpha_observers = []
 
+        # Animation proxy support
+        self._animate = None
+
         # Initialize font
         pygame.font.init()
 
         self.render()
+
+    @property
+    def animate(self):
+        """Return an animation proxy for this block."""
+        if self._animate is None:
+            self._animate = BlockAnimationProxy(self)
+        return self._animate
 
     def render(self):
         """Render the block with visual properties"""

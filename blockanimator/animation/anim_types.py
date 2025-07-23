@@ -6,16 +6,12 @@ from enum import Enum
 
 
 class AnimationType(Enum):
-    FADE_IN = "fade_in"
-    FADE_OUT = "fade_out"
     FADE_TO = "fade_to"
     MOVE_TO = "move_to"
     COLOR_CHANGE = "color_change"
-    ALPHA_CHANGE = "alpha_change"
     CAMERA_MOVE = "camera_move"
-    CHANGE_APPEARANCE = "change_appearance"
     WAIT = "wait"
-    DEFERRED_MOVE = "deferred_move"
+    RELATIVE_MOVE = "relative_move"
 
 
 @dataclass
@@ -44,17 +40,6 @@ class Animation:
     duration_frames: int = 0
     state: AnimationState = field(default_factory=AnimationState)
 
-
-@dataclass
-class FadeInAnimation(Animation):
-    type: AnimationType = field(default=AnimationType.FADE_IN, init=False)
-    target_alpha: int = 255
-
-@dataclass
-class FadeOutAnimation(Animation):
-    type: AnimationType = field(default=AnimationType.FADE_OUT, init=False)
-    target_alpha: int = 0
-
 @dataclass
 class MoveToAnimation(Animation):
     type: AnimationType = field(default=AnimationType.MOVE_TO, init=False)
@@ -65,11 +50,6 @@ class MoveToAnimation(Animation):
 class ColorChangeAnimation(Animation):
     type: AnimationType = field(default=AnimationType.COLOR_CHANGE, init=False)
     target_color: tuple = (255, 255, 255)
-
-@dataclass
-class AlphaChangeAnimation(Animation):
-    type: AnimationType = field(default=AnimationType.ALPHA_CHANGE, init=False)
-    target_alpha: int = (255)
 
 @dataclass
 class CameraMoveAnimation(Animation):
@@ -84,18 +64,12 @@ class FadeToAnimation(Animation):
     target_alpha: int = 255
 
 @dataclass
-class ChangeAppearanceAnimation(Animation):
-    type: AnimationType = field(default=AnimationType.CHANGE_APPEARANCE, init=False)
-    target_color: Optional[tuple] = None
-    target_alpha: Optional[int] = None
-
-@dataclass
 class WaitAnimation(Animation):
     type: AnimationType = field(default=AnimationType.WAIT, init=False)
 
 @dataclass
-class DeferredMoveAnimation(Animation):
-    type: AnimationType = field(default=AnimationType.DEFERRED_MOVE, init=False)
+class RelativeMoveAnimation(Animation):
+    type: AnimationType = field(default=AnimationType.RELATIVE_MOVE, init=False)
     offset: tuple = (0.0, 0.0)  # Store offset instead of absolute position
     target_grid_x: Optional[float] = None  # Will be calculated at execution time
     target_grid_y: Optional[float] = None

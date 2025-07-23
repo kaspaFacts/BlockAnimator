@@ -19,6 +19,16 @@ class AnimationOrchestrator:
                 animations = list(item.pending_animations)
                 item.pending_animations.clear()
                 return animations
+            elif hasattr(item, 'animations'):  # AnimationGroup
+                extracted = []
+                for sub_item in item.animations:
+                    extracted.extend(extract_animations_from_item(sub_item))
+                return extracted
+            elif hasattr(item, 'animation_groups'):  # SequentialAnimations
+                extracted = []
+                for sub_item in item.animation_groups:
+                    extracted.extend(extract_animations_from_item(sub_item))
+                return extracted
             elif isinstance(item, list):
                 extracted = []
                 for sub_item in item:
@@ -28,14 +38,36 @@ class AnimationOrchestrator:
                 return [item]
             return []
 
-            # Extract animations from all arguments
+            # Check if we have a SequentialAnimations object
 
+        if len(args) == 1 and hasattr(args[0], 'animation_groups'):
+            # Handle sequential animations
+            animation_groups = []
+            for group in args[0].animation_groups:
+                group_animations = extract_animations_from_item(group)
+                animation_groups.append(group_animations)
+
+            end_frame = self.animation_controller.play_sequential(animation_groups)
+            self.timeline.update_timing(end_frame)
+            return end_frame
+
+            # Handle simultaneous animations (existing logic)
         all_animations = []
         for arg in args:
             all_animations.extend(extract_animations_from_item(arg))
 
-            # Play all collected animations simultaneously
         end_frame = self.animation_controller.play_simultaneous(all_animations)
+        self.timeline.update_timing(end_frame)
+        return end_frame
+
+    def _play_sequential(self, sequential_animations):
+        """Handle sequential animation groups"""
+        animation_groups = []
+        for group in sequential_animations.animation_groups:
+            group_animations = self.extract_animations_from_item(group)
+            animation_groups.append(group_animations)
+
+        end_frame = self.animation_controller.play_sequential(animation_groups)
         self.timeline.update_timing(end_frame)
         return end_frame
 

@@ -4,8 +4,6 @@ from typing import Dict, List, Optional, Tuple, Any
 from ..base_dag import BlockDAG
 from ...blocks.consensus_block import ConsensusBlock
 from ...blocks.block_factory import ConsensusBlockFactory
-from ....animation.anim_types import DeferredMoveAnimation, FadeInAnimation, MoveToAnimation, ColorChangeAnimation
-
 
 class ForkPositionManager:
     """Manages dynamic fork positioning and visualization for Bitcoin DAG"""
@@ -36,7 +34,7 @@ class ForkPositionManager:
             self.dag.blocks[block_id].set_visible(True)
             self.visible_blocks.add(block_id)
 
-            # Make connection visible
+            # Make connection visible (but don't animate it)
         parent_id = self.block_parents.get(block_id)
         if parent_id:
             conn_id = f"{parent_id}_to_{block_id}"
@@ -46,12 +44,13 @@ class ForkPositionManager:
                 # Calculate new positions for all blocks
         repositioning_animations = self._recalculate_all_positions()
 
-        # Create fade-in animations
-        fade_anims = [FadeInAnimation(sprite_id=block_id, duration=1.0)]
-        if parent_id:
-            conn_id = f"{parent_id}_to_{block_id}"
-            if conn_id in self.dag.sprite_registry:
-                fade_anims.append(FadeInAnimation(sprite_id=conn_id, duration=1.0))
+        # Create fade-in animations ONLY for blocks (not connections)
+        fade_anims = []
+        if block_id in self.dag.blocks:
+            fade_anims.append(self.dag.blocks[block_id].animate.fade_in(duration=1.0))
+
+            # Remove the connection animation line - connections will follow automatically
+        # when the block's alpha changes through the observer pattern
 
         return fade_anims + repositioning_animations
 
@@ -146,14 +145,18 @@ class ForkPositionManager:
 
         # Move the block itself if it exists
         if block_id in self.dag.blocks:
-            current_pos = self.dag.blocks[block_id].grid_pos
+            block = self.dag.blocks[block_id]
+            current_pos = block.grid_pos
             new_pos = (current_pos[0], target_y)
-            move_anim = self.dag.move_to(block_id, new_pos, duration=2.0)
-            if move_anim:
-                move_anim.delay = 0.0  # Remove delay for consistent pacing
-                animations.append(move_anim)
 
-                # Move all children recursively
+            # Use the new animation system properly
+            move_anim = block.animate.move_to(new_pos, duration=2.0)
+            # Extract the pending animations and set delay
+            for anim in move_anim.pending_animations:
+                anim.delay = 0.0
+            animations.extend(move_anim.pending_animations)
+
+            # Move all children recursively
         children = self.block_children.get(block_id, [])
         for child_id in children:
             animations.extend(self._move_block_and_children(child_id, target_y))
@@ -166,12 +169,16 @@ class ForkPositionManager:
 
         # Color the block itself if it exists
         if block_id in self.dag.blocks:
-            color_anim = self.dag.change_color(block_id, target_color, duration=2.0)
-            if color_anim:
-                color_anim.delay = 0.0  # Remove delay for consistent pacing
-                animations.append(color_anim)
+            block = self.dag.blocks[block_id]
 
-                # Color all children recursively
+            # Use the new animation system properly
+            color_anim = block.animate.change_color(target_color, duration=2.0)
+            # Extract the pending animations and set delay
+            for anim in color_anim.pending_animations:
+                anim.delay = 0.0
+            animations.extend(color_anim.pending_animations)
+
+            # Color all children recursively
         children = self.block_children.get(block_id, [])
         for child_id in children:
             animations.extend(self._color_block_and_children(child_id, target_color))

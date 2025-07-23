@@ -3,22 +3,21 @@
 from typing import List, Dict, Any
 from .anim_types import Animation, AnimationType
 
+
 class AnimationController:
     def __init__(self, fps: int = 30):
         self.animations: List[Animation] = []
         self.fps = fps
         self.next_available_frame = 0
 
-        # Handler registry using enum types
+        # Handler registry using enum types - only consolidated animation types
         self.handlers = {
-            AnimationType.FADE_IN: self._handle_fade_in,
+            AnimationType.FADE_TO: self._handle_fade_to,
             AnimationType.MOVE_TO: self._handle_move_to,
             AnimationType.COLOR_CHANGE: self._handle_color_change,
             AnimationType.CAMERA_MOVE: self._handle_camera_move,
-            AnimationType.FADE_TO: self._handle_fade_to,
-            AnimationType.CHANGE_APPEARANCE: self._handle_change_appearance,
             AnimationType.WAIT: self._handle_wait,
-            AnimationType.DEFERRED_MOVE: self._handle_deferred_move,
+            AnimationType.RELATIVE_MOVE: self._handle_relative_move,
         }
 
     def play_simultaneous(self, animations, start_frame=None):
@@ -29,7 +28,7 @@ class AnimationController:
         if not isinstance(animations, list):
             animations = [animations]
 
-        # Filter out None animations
+            # Filter out None animations
         valid_animations = [anim for anim in animations if anim is not None]
 
         if not valid_animations:
@@ -91,7 +90,7 @@ class AnimationController:
         return max(0.0, min(elapsed_frames / duration_frames, 1.0))
 
     def _apply_animation(self, animation: Animation, sprites: Dict[str, Any],
-                        progress: float, current_frame: int) -> None:
+                         progress: float, current_frame: int) -> None:
         """Apply animation using type-specific handler."""
         self._update_debug_info(animation, progress, current_frame)
 
@@ -108,7 +107,8 @@ class AnimationController:
         """Update debugging information for an animation."""
         if animation.state.debug_start_frame is None:
             animation.state.debug_start_frame = animation.start_frame
-            print(f"Animation {animation.sprite_id}:{animation.type.value} started at frame {animation.state.debug_start_frame}")
+            print(
+                f"Animation {animation.sprite_id}:{animation.type.value} started at frame {animation.state.debug_start_frame}")
 
         animation.state.debug_frame_count += 1
         animation.state.debug_end_frame = current_frame
@@ -130,27 +130,10 @@ class AnimationController:
         print(f"  End frame: {animation.state.debug_end_frame}")
         print(f"  Final progress: {progress}")
 
-    # Animation Handler Methods
-    def _handle_fade_in(self, animation: Animation, sprite: Any,
-                        is_complete: bool, progress: float) -> None:
-        """Handle fade-in with captured state."""
-        if animation.state.actual_start_alpha is None:
-            # Automatically set visible=True for fade-in animations FIRST
-            sprite.set_visible(True)
-            animation.state.actual_start_alpha = 0
-            sprite.set_alpha(0)  # Now set alpha to 0, which will trigger render() again with visible=True
-
-        start_alpha = animation.state.actual_start_alpha
-        target_alpha = animation.target_alpha
-
-        if is_complete:
-            sprite.set_alpha(target_alpha)
-        else:
-            current_alpha = int(start_alpha + (target_alpha - start_alpha) * progress)
-            sprite.set_alpha(current_alpha)
+        # Animation Handler Methods - Only consolidated animation types
 
     def _handle_move_to(self, animation: Animation, sprite: Any,
-                       is_complete: bool, progress: float) -> None:
+                        is_complete: bool, progress: float) -> None:
         """Handle movement with captured state."""
         if animation.state.actual_start_grid_x is None:
             animation.state.actual_start_grid_x = sprite.grid_x
@@ -161,12 +144,12 @@ class AnimationController:
             sprite.grid_y = animation.target_grid_y
         else:
             sprite.grid_x = animation.state.actual_start_grid_x + \
-                           (animation.target_grid_x - animation.state.actual_start_grid_x) * progress
+                            (animation.target_grid_x - animation.state.actual_start_grid_x) * progress
             sprite.grid_y = animation.state.actual_start_grid_y + \
-                           (animation.target_grid_y - animation.state.actual_start_grid_y) * progress
+                            (animation.target_grid_y - animation.state.actual_start_grid_y) * progress
 
     def _handle_color_change(self, animation: Animation, sprite: Any,
-                            is_complete: bool, progress: float) -> None:
+                             is_complete: bool, progress: float) -> None:
         """Handle color change with captured state."""
         if animation.state.actual_start_color is None:
             animation.state.actual_start_color = sprite.color
@@ -200,9 +183,9 @@ class AnimationController:
             current_alpha = int(start_alpha + (target_alpha - start_alpha) * progress)
             sprite.set_alpha(current_alpha)
 
-    def _handle_deferred_move(self, animation: Animation, sprite: Any,
+    def _handle_relative_move(self, animation: Animation, sprite: Any,
                               is_complete: bool, progress: float) -> None:
-        """Handle deferred movement with runtime state calculation."""
+        """Handle relative movement with runtime state calculation."""
         # Calculate target position at execution time, not creation time
         if animation.target_grid_x is None:
             current_x = sprite.grid_x
@@ -221,37 +204,6 @@ class AnimationController:
                             (animation.target_grid_x - animation.state.actual_start_grid_x) * progress
             sprite.grid_y = animation.state.actual_start_grid_y + \
                             (animation.target_grid_y - animation.state.actual_start_grid_y) * progress
-
-    def _handle_change_appearance(self, animation: Animation, sprite: Any,
-                                  is_complete: bool, progress: float) -> None:
-        """Handle combined color and alpha change with captured state."""
-        if animation.state.actual_start_alpha is None:
-            animation.state.actual_start_alpha = sprite.alpha
-            animation.state.actual_start_color = sprite.color
-            # Add visibility handling for invisible sprites fading to visible
-            if (animation.target_alpha is not None and
-                    sprite.alpha == 0 and animation.target_alpha > 0 and not sprite.visible):
-                sprite.set_visible(True)
-
-        start_alpha = animation.state.actual_start_alpha
-        start_color = animation.state.actual_start_color
-        target_alpha = animation.target_alpha
-        target_color = animation.target_color
-
-        if is_complete:
-            if target_alpha is not None:
-                sprite.set_alpha(target_alpha)
-                if target_alpha == 0:
-                    sprite.set_visible(False)  # Hide when fully transparent
-            if target_color is not None:
-                sprite.set_color(target_color)
-        else:
-            if target_alpha is not None:
-                current_alpha = int(start_alpha + (target_alpha - start_alpha) * progress)
-                sprite.set_alpha(current_alpha)
-            if target_color is not None:
-                current_color = self._interpolate_color(start_color, target_color, progress)
-                sprite.set_color(current_color)
 
     def _handle_camera_move(self, animation: Animation, is_complete: bool, progress: float):
         """Handle camera movement animations."""
