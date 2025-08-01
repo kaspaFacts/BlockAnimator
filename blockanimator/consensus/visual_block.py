@@ -1,4 +1,4 @@
-# BlockAnimator\blockanimator\consensus\visual_block.py
+# BlockAnimator/blockanimator/consensus/visual_block.py
 
 import pygame
 from blockanimator.animation import BlockAnimationProxy

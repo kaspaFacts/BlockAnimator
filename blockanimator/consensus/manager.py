@@ -1,4 +1,4 @@
-# BlockAnimator\blockanimator\consensus\manager.py
+# BlockAnimator/blockanimator/consensus/manager.py
 
 import pygame
 

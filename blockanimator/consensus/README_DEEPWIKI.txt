@@ -34,11 +34,7 @@ BlockAnimator/
 │   │   ├── __init__.py
 │   │   ├── constants.py
 │   │   ├── dag_types.py
-│   │   ├── ghostdag_algorithm.py
-│   │   ├── ghostdag_dag.py
-│   │   ├── logical_block.py
 │   │   ├── manager.py
-│   │   ├── nakamoto_consensus.py
 │   │   ├── visual_block.py
 │   │   │
 │   │   ├── blocks/

@@ -1,4 +1,4 @@
-# BlockAnimator\blockanimator\consensus\dag_types.py
+# BlockAnimator/blockanimator/consensus/dag_types.py
 
 from dataclasses import dataclass
 from typing import Optional, Any, Dict

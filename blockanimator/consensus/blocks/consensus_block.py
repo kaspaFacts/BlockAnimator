@@ -1,4 +1,4 @@
-# BlockAnimator\blockanimator\consensus\blocks\consensus_block.py
+# BlockAnimator/blockanimator/consensus/blocks/consensus_block.py
 
 from typing import Protocol, List, Dict, Optional, Any, Union, runtime_checkable
 from abc import abstractmethod

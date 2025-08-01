@@ -1,24 +1,17 @@
-# BlockAnimator\examples\demo_scenes.py
+# BlockAnimator/examples/demo_scenes.py
 
 import math
 from random import randint, choice
 from numpy.random import poisson as poi
 
 from blockanimator import *
-from blockanimator.consensus import LogicalDAG
-from blockanimator.consensus.visual_block import VisualBlock
-from blockanimator.rendering.consensus_scene_adapter import ConsensusSceneAdapter
-from blockanimator.consensus.dags.ghostdag import GhostdagDAG
-from blockanimator.rendering.visual_dag_renderer import VisualDAGRenderer
-from blockanimator.consensus.dags.nakamoto_consensus.bitcoin_dag import BitcoinDAG
-
 
 # Stress Test with 50 blocks, multiple parents per block, movement, movement while color and opacity changes
 # set Resolution and FPS to see how fast rendering is on your computer, mp4 output is 61 seconds.
 # 240p, 480p, 720p, and 1080p can be selected, any FPS can be chosen.
 # Standard HD is 1080p at 30 fps
 
-# Tested ok after animation changes 7x23x25
+# Tested ok 8x1x25
 class FiftyBlocksDemo(Scene):
     def __init__(self):
         super().__init__(resolution="240p", fps=8)
@@ -113,7 +106,7 @@ class FiftyBlocksDemo(Scene):
         self.play(*return_animations)
         self.wait(2)
 
-# Tested animation ok after animation changes # TODO verify and fix setters
+# Tested ok 8x1x25 # TODO verify and fix setters
 class SimpleAnimationDemo(Scene):
     def __init__(self):
         super().__init__(resolution="720p", fps=30)
@@ -200,6 +193,7 @@ class SimpleAnimationDemo(Scene):
         # Final wait
         self.wait(2)
 
+# Tested ok 8x1x25
 class BlockCameraDemo(Scene):
     def construct(self):
         BD = BlockDAG(self)
@@ -228,146 +222,14 @@ class BlockCameraDemo(Scene):
         self.play(self.camera.animate_camera_move(15, -13, duration=1.0))
         self.wait(1)
 
-class AutoGhostDAGDemo(Scene):
-    def __init__(self):
-        super().__init__(resolution="480p", fps=15)
-
-    def construct(self):
-        AVG_AC = 4
-        BLOCKS = 20
-        MAX_BLOCKS_PER_BATCH = 3
-
-        GD = GhostDAG(self, k=2)
-
-        gen_animations = GD.add_with_ghostdag("Gen", label="G")
-        self.play(gen_animations)
-
-        blocks_remaining = BLOCKS - 1
-        batch_number = 0
-
-        while blocks_remaining > 0:
-            batch_number += 1
-            batch_size = min(randint(1, MAX_BLOCKS_PER_BATCH), blocks_remaining)
-            blocks_remaining -= batch_size
-
-            batch_animations = []
-            for i in range(batch_size):
-                block_id = f"L{batch_number}_{i + 1}"
-
-                missed_blocks = poi(lam=AVG_AC)
-                selected_parents = GD.get_tips(missed_blocks=missed_blocks)
-
-                batch_animations.append(
-                    GD.add_with_ghostdag(block_id, parents=selected_parents, label=f"{batch_number}.{i + 1}")
-                )
-
-            self.play(batch_animations)
-
-            adjust_animations = GD.adjust_layers()
-            if adjust_animations:
-                self.play(adjust_animations)
-
-        self.wait(2)
-        final_animations = GD.create_final_ghostdag_animation()
-        self.play(final_animations, run_time=5)
-
-        self.wait(3)
-
-class AutoLayerDAGDemo(Scene):
-    def __init__(self):
-        super().__init__(resolution="480p", fps=15)
-
-    def construct(self):
-        AVG_AC = 4
-        BLOCKS = 20
-        MAX_BLOCKS_PER_BATCH = 3
-        GD_K = 2
-
-        GD = GhostDAG(self, k=GD_K)
-
-        gen_animations = GD.add_with_ghostdag("Gen", label="G")
-        self.play(gen_animations)
-        self.wait(0.5)
-
-        adjust_animations = GD.adjust_layers()
-        if adjust_animations:
-            self.play(adjust_animations)
-
-        blocks_remaining = BLOCKS - 1
-        batch_number = 0
-
-        while blocks_remaining > 0:
-            batch_number += 1
-            batch_size = min(randint(1, MAX_BLOCKS_PER_BATCH), blocks_remaining)
-            blocks_remaining -= batch_size
-
-            print(f"Batch {batch_number}: Adding {batch_size} blocks")
-
-            current_tips = GD.get_tips()
-
-            batch_animations = []
-            for i in range(batch_size):
-                block_id = f"L{batch_number}_{i + 1}"
-
-                missed_blocks = poi(lam=AVG_AC)
-                selected_parents = GD.get_tips(missed_blocks=missed_blocks)
-
-                batch_animations.append(
-                    GD.add_with_ghostdag(block_id, selected_parents, label=f"{batch_number}.{i + 1}")
-                )
-
-            self.play(batch_animations)
-            self.wait(0.3)
-
-            adjust_animations = GD.adjust_layers()
-            if adjust_animations:
-                self.play(adjust_animations)
-                self.wait(0.2)
-
-        self.wait(1)
-
-        # Use animate API for color changes
-        if hasattr(GD, 'blue_blocks') and GD.blue_blocks:
-            blue_animations = [GD.blocks[block_id].animate.change_color((0, 100, 255))
-                               for block_id in GD.blue_blocks if block_id in GD.blocks]
-            self.play(blue_animations)
-            self.wait(0.5)
-
-        if hasattr(GD, 'red_blocks') and GD.red_blocks:
-            red_animations = [GD.blocks[block_id].animate.change_color((255, 100, 100))
-                              for block_id in GD.red_blocks if block_id in GD.blocks]
-            self.play(red_animations)
-            self.wait(0.5)
-
-        final_adjust = GD.adjust_layers()
-        if final_adjust:
-            self.play(final_adjust)
-
-        if hasattr(GD, 'create_tree_animation_fast'):
-            print("Creating tree animations...")
-            tree_animations = GD.create_tree_animation_fast()
-            if tree_animations:
-                print("Playing tree animations...")
-                self.play(tree_animations, run_time=5.0)
-                print("Tree animations complete")
-
-        self.wait(3)
-
-        print(f"\nFinal LayerDAG Statistics:")
-        if hasattr(GD, 'blue_blocks'):
-            print(f"Blue blocks: {len(GD.blue_blocks)}")
-        if hasattr(GD, 'red_blocks'):
-            print(f"Red blocks: {len(GD.red_blocks)}")
-        if hasattr(GD, 'block_scores'):
-            print(f"Block scores available: {len(GD.block_scores)}")
-
+# Tested ok 8x1x25
 class BitcoinChainDemo(Scene):
     def __init__(self):
         super().__init__(resolution="720p", fps=30)
 
     def construct(self):
-        # Create a BitcoinDAG instance
-        BD = BitcoinDAG(self)
+        # Create a BitcoinDAG instance using new system
+        BD = BitcoinDAG("bitcoin", scene=self)
 
         # Add genesis block
         gen_animations = BD.add_bitcoin_block("Genesis", label="Genesis")
@@ -396,8 +258,8 @@ class BitcoinChainDemo(Scene):
             self.wait(0.3)
             block_objects[block_id] = BD.blocks[block_id]  # Store block object
 
-        # Validate chain integrity
-        if BD.validate_chain_integrity():
+        # Validate chain integrity - method name updated for new system
+        if BD.validate_dag_integrity():
             print("✓ Bitcoin chain integrity validated")
 
             # Show chain statistics
@@ -406,10 +268,22 @@ class BitcoinChainDemo(Scene):
 
         self.wait(1)
 
-        # Highlight the entire chain with Bitcoin orange
-        chain_highlight = BD.create_chain_animation(highlight_color=(255, 165, 0))
-        if chain_highlight:
-            self.play(chain_highlight)
+        # NOTE: create_chain_animation() not implemented in new system
+        # Replaced with manual chain highlighting using animation proxy
+        chain_highlight_animations = []
+        for i, block_id in enumerate(block_ids):
+            if block_id in block_objects:
+                # Create color change animation for each block with staggered timing
+                color_anim = block_objects[block_id].animate.change_color((255, 165, 0), duration=0.5)
+                # NOTE: delay property may not be available in current animation proxy
+                # Using sequential play instead
+                chain_highlight_animations.append(color_anim)
+
+        if chain_highlight_animations:
+            # Play animations sequentially for chain highlighting effect
+            for anim in chain_highlight_animations:
+                self.play([anim])
+                self.wait(0.1)
 
         self.wait(1)
 
@@ -425,7 +299,7 @@ class BitcoinChainDemo(Scene):
             middle_block_id = block_ids[len(block_ids) // 2]
             camera_anim = self.camera.animate_camera_to_sprite(middle_block_id, duration=2.0)
             if camera_anim:
-                self.play(camera_anim)
+                self.play([camera_anim])
 
         self.wait(2)
 
@@ -436,194 +310,44 @@ class BitcoinChainDemo(Scene):
                 block_objects[block_id].animate.fade_to(150, duration=1.0)
             )
 
-        self.play(*fade_animations)
+        self.play(fade_animations)
         self.wait(1)
 
-# working to separate blocks from visual representation, blocks and dags are getting too crowded
-class BitcoinHiddenForkDemo(Scene):
-    def __init__(self):
-        super().__init__(resolution="720p", fps=30)
-
-    def construct(self):
-        # Phase 1: Create logical DAG with Bitcoin consensus
-        logical_dag = LogicalDAG(consensus_type="bitcoin")
-
-        # Create all logical blocks first (including hidden fork)
-        # This separates consensus logic from visual rendering
-
-        # Build main chain logically
-        logical_dag.add_logical_block("Genesis")
-        for i in range(1, 6):  # Blocks 1-5
-            parent = "Genesis" if i == 1 else f"Block_{i - 1}"
-            logical_dag.add_logical_block(f"Block_{i}", [parent])
-
-            # Create hidden fork logically from Block_2
-        fork_blocks = logical_dag.create_fork_from_point("Block_2", ["Fork_1", "Fork_2", "Fork_3"])
-
-        # Validate logical structure
-        if logical_dag.validate_dag_integrity():
-            print("✓ Logical DAG integrity validated")
-
-            # Phase 2: Visual rendering in creation order
-        genesis_pos = (10, 25)
-        block_spacing = 32  # 4 * 8 grid units
-
-        # Render main chain blocks visually
-        main_chain_blocks = ["Genesis", "Block_1", "Block_2", "Block_3", "Block_4", "Block_5"]
-        visual_blocks = {}
-
-        for i, block_id in enumerate(main_chain_blocks):
-            logical_block = logical_dag.get_block(block_id)
-            pos = (genesis_pos[0] + i * block_spacing, genesis_pos[1])
-
-            # Create visual representation
-            visual_block = VisualBlock(
-                pos[0], pos[1],
-                logical_block,
-                self.coords.grid_size,
-                color=(255, 165, 0)  # Bitcoin orange
-            )
-
-            visual_blocks[block_id] = visual_block
-            self.sprite_registry[block_id] = visual_block
-            self.sprites.add(visual_block, layer=self.BLOCK_LAYER)
-
-            # Animate block appearance
-            self.play(self.fade_to(block_id, 255, duration=0.5))
-            self.wait(0.3)
-
-            # Phase 3: Render hidden fork at 50% opacity
-        hidden_animations = []
-
-        for i, fork_block in enumerate(fork_blocks):
-            logical_block = logical_dag.get_block(fork_block.block_id)
-            # Position above main chain
-            pos = (genesis_pos[0] + (i + 3) * block_spacing, genesis_pos[1] + 60)
-
-            visual_block = VisualBlock(
-                pos[0], pos[1],
-                logical_block,
-                self.coords.grid_size,
-                color=(255, 165, 0)
-            )
-
-            visual_blocks[fork_block.block_id] = visual_block
-            self.sprite_registry[fork_block.block_id] = visual_block
-            self.sprites.add(visual_block, layer=self.BLOCK_LAYER)
-
-            # Start hidden (50% opacity)
-            hidden_animations.append(self.fade_to(fork_block.block_id, 127, duration=0.1))
-
-        self.play(hidden_animations)
-        self.wait(1)
-
-        print(f"Main chain length: {logical_dag.get_chain_length()}")
-        print(f"Current tip: {logical_dag.get_chain_tip()}")
-
-        # Phase 4: Dramatic fork revelation and reorganization
-        reveal_animations = []
-
-        # Fade hidden fork to full opacity
-        for fork_block in fork_blocks:
-            reveal_animations.append(
-                self.change_appearance(fork_block.block_id, target_alpha=255, duration=2.0)
-            )
-
-            # Move hidden fork to main chain position
-        for i, fork_block in enumerate(fork_blocks):
-            new_x = genesis_pos[0] + (i + 3) * block_spacing
-            new_pos = (new_x, genesis_pos[1])
-            reveal_animations.append(
-                self.move_to(fork_block.block_id, new_pos, duration=2.0)
-            )
-
-            # Move orphaned honest blocks down
-        orphaned_blocks = ["Block_3", "Block_4", "Block_5"]
-        orphan_y = genesis_pos[1] - 60
-
-        for block_id in orphaned_blocks:
-            current_visual = visual_blocks[block_id]
-            orphan_pos = (current_visual.x, orphan_y)
-            reveal_animations.append(
-                self.move_to(block_id, orphan_pos, duration=2.0)
-            )
-            # Fade to show orphaned status
-            reveal_animations.append(
-                self.change_appearance(block_id, target_alpha=128, target_color=(255, 100, 100), duration=2.0)
-            )
-
-            # Execute all reveal animations simultaneously
-        self.play(reveal_animations)
-        self.wait(2)
-
-        # Phase 5: Update logical chain and highlight new main chain
-        new_main_chain = ["Genesis", "Block_1", "Block_2", "Fork_1", "Fork_2", "Fork_3"]
-        logical_dag.reorganize_chain(new_main_chain)
-
-        # Highlight new main chain
-        highlight_animations = []
-        for block_id in new_main_chain:
-            highlight_animations.append(
-                self.change_appearance(block_id, target_color=(0, 255, 0), duration=1.0)
-            )
-
-        self.play(highlight_animations)
-        self.wait(2)
-
-        # Display final statistics
-        stats = logical_dag.get_statistics()
-        print(f"✓ Fork revealed! New main chain: {stats['chain_tip']}")
-        print(f"✓ Chain length: {stats['chain_length']}")
-        print(f"✗ Orphaned blocks: {orphaned_blocks}")
-
-        self.wait(1)
-
-# begin testing new abstracted blocks/dags
-class NewConsensusDemo(Scene):
-    def construct(self):
-        # Test Bitcoin DAG
-        bitcoin_dag = ConsensusSceneAdapter(self, "bitcoin")
-
-        # Add some blocks
-        genesis_anims = bitcoin_dag.add("Genesis", parents=None)
-        self.play(genesis_anims)
-
-        block_a_anims = bitcoin_dag.add("A", parents=["Genesis"])
-        self.play(block_a_anims)
-
-        self.wait(2)
-
-# Testing new abstraction
+# Tested ok 8x1x25
 class BitcoinChainTest(Scene):
     def construct(self):
-        dag = ConsensusSceneAdapter(self, "bitcoin")
+        # Replace ConsensusSceneAdapter with direct BitcoinDAG usage
+        dag = BitcoinDAG("bitcoin", scene=self)
 
-        genesis_anims = dag.add("Genesis", parents=None)
+        # Use Bitcoin-specific methods
+        genesis_anims = dag.add_bitcoin_block("Genesis", label="Genesis")
         self.play(genesis_anims)
 
-        block_a_anims = dag.add("A", parents=["Genesis"])
+        block_a_anims = dag.add_bitcoin_block("A", parent_id="Genesis", label="A")
         self.play(block_a_anims)
 
-        block_b_anims = dag.add("B", parents=["A"])
+        block_b_anims = dag.add_bitcoin_block("B", parent_id="A", label="B")
         self.play(block_b_anims)
 
-# Testing new abstraction
+# Tested ok 8x1x25
 class GhostdagTest(Scene):
     def construct(self):
-        dag = ConsensusSceneAdapter(self, "ghostdag", k=3)
+        # Use GhostdagDAG directly instead of ConsensusSceneAdapter
+        dag = GhostdagDAG(self, k=3)
 
-        genesis_anims = dag.add("Genesis", parents=None)
+        # Use GHOSTDAG-specific method instead of generic add()
+        genesis_anims = dag.add_ghostdag_block("Genesis", parents=[], label="Genesis")
         self.play(genesis_anims)
 
         # Multi-parent structure
-        a_anims = dag.add("A", parents=["Genesis"])
-        b_anims = dag.add("B", parents=["Genesis"])
+        a_anims = dag.add_ghostdag_block("A", parents=["Genesis"], label="A")
+        b_anims = dag.add_ghostdag_block("B", parents=["Genesis"], label="B")
         self.play(a_anims, b_anims)
 
-        c_anims = dag.add("C", parents=["A", "B"])
+        c_anims = dag.add_ghostdag_block("C", parents=["A", "B"], label="C")
         self.play(c_anims)
 
-# Testing new abstraction
+# Tested ok 8x1x25
 class ExtendedGhostdagDemo(Scene):
     def __init__(self):
         super().__init__(resolution="480p", fps=15)
@@ -632,38 +356,38 @@ class ExtendedGhostdagDemo(Scene):
         # Add 1 second wait before starting
         self.wait(1)
 
-        # Create GHOSTDAG with k=3 parameter
-        dag = ConsensusSceneAdapter(self, "ghostdag", k=3)
+        # Replace ConsensusSceneAdapter with direct GhostdagDAG usage
+        dag = GhostdagDAG(self, k=3)
 
-        # Genesis block
-        genesis_anims = dag.add("Genesis", parents=None)
+        # Genesis block - use GHOSTDAG-specific method
+        genesis_anims = dag.add_ghostdag_block("Genesis", parents=[], label="Genesis")
         self.play(genesis_anims)
         self.wait(0.5)
 
         # Layer 1: Two blocks from genesis
-        a_anims = dag.add("A", parents=["Genesis"])
-        b_anims = dag.add("B", parents=["Genesis"])
+        a_anims = dag.add_ghostdag_block("A", parents=["Genesis"], label="A")
+        b_anims = dag.add_ghostdag_block("B", parents=["Genesis"], label="B")
         self.play(a_anims)
         self.wait(0.3)
         self.play(b_anims)
         self.wait(0.5)
 
         # Layer 2: Multi-parent blocks
-        c_anims = dag.add("C", parents=["A", "B"])  # Merge A and B
+        c_anims = dag.add_ghostdag_block("C", parents=["A", "B"], label="C")  # Merge A and B
         self.play(c_anims)
         self.wait(0.3)
 
-        d_anims = dag.add("D", parents=["A"])  # Single parent from A
-        e_anims = dag.add("E", parents=["B"])  # Single parent from B
+        d_anims = dag.add_ghostdag_block("D", parents=["A"], label="D")  # Single parent from A
+        e_anims = dag.add_ghostdag_block("E", parents=["B"], label="E")  # Single parent from B
         self.play(d_anims)
         self.wait(0.2)
         self.play(e_anims)
         self.wait(0.5)
 
         # Layer 3: More complex relationships
-        f_anims = dag.add("F", parents=["C", "D"])  # Multi-parent
-        g_anims = dag.add("G", parents=["C", "E"])  # Multi-parent
-        h_anims = dag.add("H", parents=["D", "E"])  # Multi-parent
+        f_anims = dag.add_ghostdag_block("F", parents=["C", "D"], label="F")  # Multi-parent
+        g_anims = dag.add_ghostdag_block("G", parents=["C", "E"], label="G")  # Multi-parent
+        h_anims = dag.add_ghostdag_block("H", parents=["D", "E"], label="H")  # Multi-parent
         self.play(f_anims)
         self.wait(0.2)
         self.play(g_anims)
@@ -672,9 +396,9 @@ class ExtendedGhostdagDemo(Scene):
         self.wait(0.5)
 
         # Layer 4: Single and multi-parent mix
-        i_anims = dag.add("I", parents=["F"])
-        j_anims = dag.add("J", parents=["G", "H"])
-        k_anims = dag.add("K", parents=["F", "G", "H"])  # Three parents
+        i_anims = dag.add_ghostdag_block("I", parents=["F"], label="I")
+        j_anims = dag.add_ghostdag_block("J", parents=["G", "H"], label="J")
+        k_anims = dag.add_ghostdag_block("K", parents=["F", "G", "H"], label="K")  # Three parents
         self.play(i_anims)
         self.wait(0.2)
         self.play(j_anims)
@@ -683,10 +407,10 @@ class ExtendedGhostdagDemo(Scene):
         self.wait(0.5)
 
         # Layer 5: Testing layer adjustment with multiple blocks
-        l_anims = dag.add("L", parents=["I", "J"])
-        m_anims = dag.add("M", parents=["J", "K"])
-        n_anims = dag.add("N", parents=["I", "K"])
-        o_anims = dag.add("O", parents=["I"])  # Single parent
+        l_anims = dag.add_ghostdag_block("L", parents=["I", "J"], label="L")
+        m_anims = dag.add_ghostdag_block("M", parents=["J", "K"], label="M")
+        n_anims = dag.add_ghostdag_block("N", parents=["I", "K"], label="N")
+        o_anims = dag.add_ghostdag_block("O", parents=["I"], label="O")  # Single parent
         self.play(l_anims)
         self.wait(0.2)
         self.play(m_anims)
@@ -697,10 +421,10 @@ class ExtendedGhostdagDemo(Scene):
         self.wait(0.5)
 
         # Layer 6: Final layer with complex merges
-        p_anims = dag.add("P", parents=["L", "M", "N"])  # Three parents
-        q_anims = dag.add("Q", parents=["M", "O"])
-        r_anims = dag.add("R", parents=["N", "O"])
-        s_anims = dag.add("S", parents=["L"])  # Single parent
+        p_anims = dag.add_ghostdag_block("P", parents=["L", "M", "N"], label="P")  # Three parents
+        q_anims = dag.add_ghostdag_block("Q", parents=["M", "O"], label="Q")
+        r_anims = dag.add_ghostdag_block("R", parents=["N", "O"], label="R")
+        s_anims = dag.add_ghostdag_block("S", parents=["L"], label="S")  # Single parent
         self.play(p_anims)
         self.wait(0.2)
         self.play(q_anims)
@@ -711,14 +435,15 @@ class ExtendedGhostdagDemo(Scene):
         self.wait(0.5)
 
         # Final tip blocks
-        t_anims = dag.add("T", parents=["P", "Q", "R", "S"])  # Four parents - ultimate merge
+        t_anims = dag.add_ghostdag_block("T", parents=["P", "Q", "R", "S"],
+                                         label="T")  # Four parents - ultimate merge
         self.play(t_anims)
         self.wait(1)
 
         # Final pause to observe the complete DAG
         self.wait(3)
 
-# Testing new abstraction with addition of layerdag
+# Tested, completed but visuals are wrong 8x1x25
 class GhostdagPoissonDemo(Scene):
     """Demonstrates GHOSTDAG with realistic network delays using Poisson distribution."""
 
@@ -732,25 +457,21 @@ class GhostdagPoissonDemo(Scene):
         super().__init__(resolution="480p", fps=15)
 
     def construct(self):
-        # Phase 1: Create logical DAG using new refactored system
-        ghostdag = GhostdagDAG(k=self.DAG_K_PARAMETER, layer_spacing=15, chain_spacing=8)
+        # Phase 1: Create GHOSTDAG directly using the new system
+        ghostdag = GhostdagDAG(self, k=self.DAG_K_PARAMETER)
 
-        # Create visual renderer for the DAG
-        renderer = VisualDAGRenderer(self, ghostdag)
-
-        # Add genesis block - the renderer handles both logical and visual creation
-        genesis_animations = renderer.add_visual_block("Genesis", parents=[])
-        genesis_block = ghostdag.get_block("Genesis")
-        print(f"Added Genesis block with blue score: {genesis_block.consensus_data.blue_score}")
+        # Add genesis block directly
+        genesis_animations = ghostdag.add_ghostdag_block("Genesis", parents=[], label="Genesis")
         self.play(genesis_animations)
+        self.wait(0.5)
 
         # Create all logical blocks with network delay simulation
-        blocks_remaining = self.TOTAL_BLOCKS
+        blocks_remaining = self.TOTAL_BLOCKS - 1  # Subtract genesis
         batch_number = 0
 
         while blocks_remaining > 0:
             batch_number += 1
-            batch_size = randint(1, min(self.MAX_BLOCKS_PER_BATCH, blocks_remaining))
+            batch_size = min(randint(1, self.MAX_BLOCKS_PER_BATCH), blocks_remaining)
             blocks_remaining -= batch_size
 
             print(f"\n--- Batch {batch_number}: Creating {batch_size} blocks ---")
@@ -763,7 +484,7 @@ class GhostdagPoissonDemo(Scene):
                 # Simulate network delay with Poisson distribution
                 network_delay = poi(lam=self.AVG_NETWORK_DELAY)
 
-                # Get current tips (simplified - no history tracking in new system)
+                # Get current tips from the GHOSTDAG
                 current_tips = ghostdag.get_tips()
 
                 # Simulate missed blocks by using a subset of tips
@@ -782,16 +503,23 @@ class GhostdagPoissonDemo(Scene):
                     num_parents = randint(1, min(5, len(available_tips)))
                     parents = list(set(choice(available_tips) for _ in range(num_parents)))
 
-                    # Use renderer to create both logical and visual block
-                block_animations = renderer.add_visual_block(block_id, parents=parents)
-                block = ghostdag.get_block(block_id)
+                    # Add block directly using GHOSTDAG
+                block_animations = ghostdag.add_ghostdag_block(
+                    block_id,
+                    parents=parents,
+                    label=f"B{batch_number}.{block_in_batch}"
+                )
 
-                print(f"  Block {block_id}:")
-                print(f"    Network delay: {network_delay} steps")
-                print(f"    Parents: {parents}")
-                print(f"    Selected parent: {block.consensus_data.selected_parent}")
-                print(f"    Blue score: {block.consensus_data.blue_score}")
-                print(f"    Mergeset blues: {block.consensus_data.mergeset_blues}")
+                # Get the logical block for statistics
+                if block_id in ghostdag.logical_blocks:
+                    block = ghostdag.logical_blocks[block_id]
+                    print(f"  Block {block_id}:")
+                    print(f"    Network delay: {network_delay} steps")
+                    print(f"    Parents: {parents}")
+                    if hasattr(block, 'consensus_data') and block.consensus_data:
+                        print(f"    Selected parent: {block.consensus_data.selected_parent}")
+                        print(f"    Blue score: {block.consensus_data.blue_score}")
+                        print(f"    Mergeset blues: {block.consensus_data.mergeset_blues}")
 
                 batch_animations.extend(block_animations)
 
@@ -822,24 +550,42 @@ class GhostdagPoissonDemo(Scene):
             print(f"Highest scoring block: {highest_block}")
 
             # Move camera to focus on the highest scoring block
-            camera_anim = self.camera.animate_camera_to_sprite(highest_block)
-            self.play(camera_anim)
-            self.wait(1)
+            if highest_block in ghostdag.blocks:
+                camera_anim = self.camera.animate_camera_to_sprite(highest_block)
+                self.play(camera_anim)
+                self.wait(1)
 
-            # Get and highlight the selected parent chain
+                # Get and highlight the selected parent chain
             chain = ghostdag.get_selected_parent_chain(highest_block)
             print(f"Selected parent chain: {' -> '.join(chain)}")
 
-            # Show additional GHOSTDAG-specific information
-            blue_blocks = ghostdag.get_blue_blocks()
-            red_blocks = ghostdag.get_red_blocks()
-            print(f"Blue blocks: {blue_blocks}")
-            print(f"Red blocks: {red_blocks}")
+            # Use GHOSTDAG's built-in visualization methods
+            chain_animations = ghostdag.animate_selected_parent_chain(highest_block)
+            if chain_animations:
+                self.play(chain_animations)
+                self.wait(1)
 
-            # Final wait before ending
+                # Show blue score visualization
+            blue_score_animations = []
+            for block_id in ghostdag.get_blue_blocks():
+                if block_id in ghostdag.blocks:
+                    viz_anims = ghostdag.animate_blue_score_visualization(block_id)
+                    blue_score_animations.extend(viz_anims)
+
+            if blue_score_animations:
+                self.play(blue_score_animations)
+                self.wait(1)
+
+                # Final GHOSTDAG result animation
+            final_animations = ghostdag.animate_final_ghostdag_result()
+            if final_animations:
+                self.play(final_animations)
+                self.wait(2)
+
+                # Final wait before ending
         self.wait(1)
 
-# Testing manim anim chaining
+# Tested ok 8x1x25
 class TestManimLike(Scene):
     def __init__(self):
         super().__init__(resolution="480p", fps=15)
@@ -859,8 +605,7 @@ class TestManimLike(Scene):
         self.play(block.animate.shift((10, -10)))
         self.wait(1)
 
-
-# Testing manim anim chaining with multiple blocks
+# Tested ok 8x1x25
 class TestManimLikeWithMultiple(Scene):
     def __init__(self):
         super().__init__(resolution="480p", fps=15)
@@ -915,7 +660,7 @@ class TestManimLikeWithMultiple(Scene):
         )
         self.wait(2)
 
-# Testing for blanim like execution
+# Tested ok 8x1x25
 class TestDAGChaining(Scene):
     def __init__(self):
         super().__init__(resolution="480p", fps=15)
@@ -1005,8 +750,7 @@ class TestDAGChaining(Scene):
         )
         self.wait(2)
 
-
-# Example scene demonstrating the new Manim-like GHOSTDAG animation system
+# Tested ok 8x1x25
 class GhostdagManimExample(Scene):
     def __init__(self):
         super().__init__(resolution="480p", fps=15)
@@ -1117,7 +861,7 @@ class GhostdagManimExample(Scene):
         self.play(reset_anims)
         self.wait(1)
 
-# Alternative example showing DAG-level animation methods
+# Tested ok 8x1x25
 class GhostdagDAGMethodsExample(Scene):
     def __init__(self):
         super().__init__(resolution="480p", fps=15)
@@ -1141,7 +885,7 @@ class GhostdagDAGMethodsExample(Scene):
         self.play(final_result)
         self.wait(2)
 
-# testing new manim like chaining
+# Tested ok 8x1x25
 class ComprehensiveAnimationTest(Scene):
     def __init__(self):
         super().__init__(resolution="480p", fps=15)
@@ -1222,6 +966,7 @@ class ComprehensiveAnimationTest(Scene):
         )
         self.wait(2)
 
+# Tested ok 8x1x25
 class BlockDAGDemo(Scene):
     def construct(self):
         BD = BlockDAG(self)
@@ -1251,7 +996,7 @@ class BlockDAGDemo(Scene):
 
         self.wait(3)
 
-
+# Tested, completed but visuals are wrong 8x1x25
 class LayerDAGDemo(Scene):
     def __init__(self):
         super().__init__(resolution="480p", fps=15)
@@ -1264,7 +1009,7 @@ class LayerDAGDemo(Scene):
         self.play(gen_animations)
         gen_block = LD.blocks["Gen"]
 
-        # Simultaneous animations (list) - FIXED METHOD NAME
+        # Simultaneous animations (list)
         u_blocks = []
         u_animations = []
         for i in range(3):
@@ -1274,7 +1019,7 @@ class LayerDAGDemo(Scene):
             u_blocks.append(LD.blocks[block_id])
         self.play(u_animations)
 
-        # Sequential animations (list of lists) - FIXED METHOD NAME
+        # Sequential animations (list of lists)
         tips = LD.get_tips()
         w_blocks = []
         w_animations_group = []
@@ -1305,7 +1050,7 @@ class LayerDAGDemo(Scene):
 
         self.wait(2.0)
 
-# Tested ok after animation changes 7x23x25
+# Tested ok 8x1x25
 class SimultaneousVsSequentialDemo(Scene):
     def __init__(self):
         super().__init__(resolution='480p', fps=15)
@@ -1369,7 +1114,7 @@ class SimultaneousVsSequentialDemo(Scene):
 
 # TODO clean up and move to BitcoinDAG
 
-# Tested ok after animation changes 7x23x25
+# Tested ok 8x1x25
 class Z(Scene):
     def __init__(self):
         super().__init__(resolution="480p", fps=15)
@@ -1460,7 +1205,6 @@ class Z(Scene):
                 dag.sprite_registry[conn_id].set_alpha(0)
                 dag.sprite_registry[conn_id].set_visible(False)
 
-# Tested ok after animation changes 7x23x25
 class ForkPositionManager:
     def __init__(self, dag, genesis_y=25, fork_offset=8):
         self.dag = dag
@@ -1729,7 +1473,7 @@ def create_dynamic_block_race(scene, race_length=5, fork_at_block=1):
 
     return dag, fork_manager, blocks_to_reveal
 
-# Tested ok after animation changes 7x23x25
+# Tested ok 8x1x25
 class DynamicBlockRaceScene(Scene):
     def __init__(self, race_length=5):
         super().__init__(resolution="480p", fps=15)
@@ -1747,7 +1491,7 @@ class DynamicBlockRaceScene(Scene):
 
         self.wait(2)
 
-# Tested ok after animation changes 7x23x25
+# Tested ok 8x1x25
 class SelfishMiningSceneBefore(Scene):
     def __init__(self):
         super().__init__(resolution="720p", fps=30)
@@ -1897,7 +1641,7 @@ class SelfishMiningSceneBefore(Scene):
 
         self.play(animations)
 
-# Tested ok after animation changes 7x23x25
+
 class SelfishMiningAnimator:
     """Handles all selfish mining animation logic"""
 
@@ -2048,7 +1792,7 @@ class SelfishMiningAnimator:
 
         return honest_blocks, selfish_blocks
 
-# Tested ok after animation changes 7x23x25
+# Tested ok 8x1x25
 class SelfishMiningScene(Scene):
     """Clean demo scene using the refactored selfish mining animator"""
 
@@ -2100,7 +1844,7 @@ class SelfishMiningScene(Scene):
 
     # Alternative dynamic usage example
 
-# Tested ok after animation changes 7x23x25
+# Tested ok 8x1x25
 class DynamicSelfishMiningScene(Scene):
     """Example showing dynamic generation of selfish mining scenarios"""
 

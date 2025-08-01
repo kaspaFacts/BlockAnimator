@@ -1,4 +1,4 @@
-# blockanimator/consensus/dags/nakamoto_consensus/bitcoin_dag.py
+# BlockAnimator/blockanimator/consensus/dags/nakamoto_consensus/bitcoin_dag.py
 
 from typing import Dict, List, Optional, Tuple, Any
 from ..base_dag import BlockDAG

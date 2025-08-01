@@ -3,7 +3,6 @@
 import click
 from pathlib import Path
 from .utils.module_ops import scene_classes_from_file, config  # Import config from your module_ops or central config
-from .utils.config import DisplayConfig  # Import DisplayConfig for resolution info
 
 # Define quality presets (as previously discussed)
 QUALITY_PRESETS = {

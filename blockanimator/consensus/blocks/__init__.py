@@ -1,4 +1,4 @@
-# BlockAnimator\blockanimator\consensus\blocks\__init__.py
+# BlockAnimator/blockanimator/consensus/blocks/__init__.py
 
 """
 Consensus block implementations for blockchain visualization.

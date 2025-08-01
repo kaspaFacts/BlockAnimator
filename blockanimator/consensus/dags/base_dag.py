@@ -1,4 +1,4 @@
-# BlockAnimator\blockanimator\consensus\base_dag.py
+# BlockAnimator\blockanimator\consensus\dags\base_dag.py
 
 import pygame
 from blockanimator.animation import FadeToAnimation, MoveToAnimation, ColorChangeAnimation

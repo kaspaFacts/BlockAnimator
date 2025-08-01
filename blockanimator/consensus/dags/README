@@ -1,6 +1,9 @@
 Adding a New Consensus DAG Type
 
-The consensus\dags directory contains everything needed to create DAGs using any consensus protocol. Consensus DAGs are built using the DAG factory pattern with a protocol-based interface, following the same architectural patterns established for consensus blocks.
+The consensus\dags directory contains everything needed to create DAGs using any consensus protocol. Consensus DAGs are
+built using the DAG factory pattern with a protocol-based interface, following the same architectural patterns established
+for consensus blocks.
+
 Overview
 
 The consensus DAG system uses:

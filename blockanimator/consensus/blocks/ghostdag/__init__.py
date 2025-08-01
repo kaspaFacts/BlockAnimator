@@ -1,4 +1,4 @@
-# BlockAnimator\blockanimator\consensus\blocks\ghostdag\__init__.py
+# BlockAnimator/blockanimator/consensus/blocks/ghostdag/__init__.py
 
 """
 GHOSTDAG consensus block implementation.

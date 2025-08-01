@@ -1,4 +1,4 @@
-# BlockAnimator\blockanimator\consensus\blocks\ghostdag\ghostdag_block.py
+# BlockAnimator/blockanimator/consensus/blocks/ghostdag/ghostdag_block.py
 
 from typing import List, Dict, Optional
 from blockanimator.consensus.blocks.consensus_block import ConsensusBlock
