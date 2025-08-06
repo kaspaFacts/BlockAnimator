@@ -1,6 +1,8 @@
 # BlockAnimator\blockanimator\consensus\blocks\nakamoto_consensus/bitcoin_block.py
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
+
+from blockanimator.animation import LabelChangeAnimation
 from blockanimator.consensus.blocks.consensus_block import ConsensusBlock
 from dataclasses import dataclass
 
@@ -23,6 +25,7 @@ class BitcoinBlock:
 
     def __init__(self, block_id: str, parents: List[str] = None, **kwargs):
         self.block_id = block_id
+        self.label = kwargs.get('label', block_id) # get kwarg "label" or fallback to block_id
         self.parents = parents or []
         self.consensus_type = "bitcoin"
         self.creation_order: Optional[int] = None
@@ -34,6 +37,12 @@ class BitcoinBlock:
 
     def is_genesis(self) -> bool:
         return len(self.parents) == 0
+
+    def get_visual_properties(self) -> Dict[str, Any]:
+        """Get visual properties for this block type."""
+        return {
+            'color': (0, 0, 255)
+        }
 
     def calculate_consensus_data(self, k: int, dag_context: Dict[str, ConsensusBlock]) -> None:
         """Calculate Bitcoin consensus data (height and cumulative work)"""
@@ -62,14 +71,18 @@ class BitcoinBlock:
 
         return True
 
+    def change_label(self, new_label: str, delay: float = 0.0, duration: float = 0.1):
+        """Create a label change animation for this block."""
+        return LabelChangeAnimation(
+            sprite_id=self.block_id,
+            new_label=new_label,
+            delay=delay,
+            duration=duration
+        )
+
     def get_display_info(self) -> str:
         """Get display text for visual representation"""
-        if self.consensus_data:
-            if self.consensus_data.parent:
-                return f"{self.block_id}\nH:{self.consensus_data.height}\nParent: {self.consensus_data.parent[:6]}..."
-            else:
-                return f"{self.block_id}\nH:{self.consensus_data.height}\n(Genesis)"
-        return self.block_id
+        return self.label
 
     def get_chain_tip(self) -> str:
         """Get the tip of this block's chain"""

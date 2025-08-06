@@ -11,7 +11,7 @@ class Block(pygame.sprite.Sprite):
     Consensus logic is handled by the consensus/blocks/ system.
     """
 
-    def __init__(self, x, y, sprite_id, grid_size, text="Block", color=(0, 0, 255)):
+    def __init__(self, x, y, sprite_id, grid_size, color=(0, 0, 255)):
         super().__init__()
 
         # Core visual properties
@@ -19,7 +19,6 @@ class Block(pygame.sprite.Sprite):
         self.grid_size = grid_size
         self.sprite_id = sprite_id
         self.color = color
-        self.text = text
 
         # Create surface
         self.image = pygame.Surface((self.size + 10, self.size + 10), pygame.SRCALPHA)
@@ -39,13 +38,6 @@ class Block(pygame.sprite.Sprite):
         # List of connections observing this block's alpha
         self.alpha_observers = []
 
-        # Calculate font size proportionally to grid_size
-        font_size = max(int(grid_size * 2), 8)  # 200% of grid unit, minimum 8px
-
-        # Font
-        pygame.font.init()
-        self.font = pygame.font.Font(None, font_size)
-
         self._animate = None  # Initialize the animate property
 
         self.render()
@@ -58,7 +50,7 @@ class Block(pygame.sprite.Sprite):
         return self._animate
 
     def render(self):
-        """Render the block with consensus-specific customizations."""
+        """Render the block with visual properties only."""
         self.image.fill((0, 0, 0, 0))
 
         if not self.visible:
@@ -72,11 +64,7 @@ class Block(pygame.sprite.Sprite):
         outline_color, outline_width = self.get_outline_properties()
         pygame.draw.rect(self.image, outline_color, block_rect, outline_width)
 
-        # Draw consensus-specific text
-        display_text = self.get_display_text()
-        self.render_text(display_text, block_rect)
-
-        # Always apply alpha
+        # Apply alpha
         self.image.set_alpha(self.alpha)
 
     def get_outline_properties(self):
@@ -84,21 +72,6 @@ class Block(pygame.sprite.Sprite):
         outline_color = (255, 255, 255)  # Default white
         outline_width = max(int(self.grid_size * 0.25), 1)  # 25% of grid unit, minimum 1px
         return outline_color, outline_width
-
-    def get_display_text(self):
-        """Get text to display. Override in subclasses for consensus-specific info."""
-        return self.text
-
-    def render_text(self, display_text, block_rect):
-        """Render text on the block."""
-        text_lines = display_text.split('\n')
-
-        for i, line in enumerate(text_lines):
-            text_surface = self.font.render(line, True, (255, 255, 255))
-            text_rect = text_surface.get_rect(
-                center=(block_rect.centerx, block_rect.centery + i * 15)
-            )
-            self.image.blit(text_surface, text_rect)
 
     def set_position(self, x, y):
         """Set sprite position."""
@@ -132,21 +105,14 @@ class BitcoinBlock(Block):
     Visual representation only - consensus logic handled by consensus/blocks/nakamoto_consensus/
     """
 
-    def __init__(self, x, y, sprite_id, grid_size, text="Block", color=(255, 165, 0),
+    def __init__(self, x, y, sprite_id, grid_size, color=(255, 165, 0),
                  parent: str = None, **kwargs):
-        super().__init__(x, y, sprite_id, grid_size, text, color)
+        super().__init__(x, y, sprite_id, grid_size, color)
 
         # Store parent info for visual display only
         # Actual consensus logic is in BitcoinBlock from consensus/blocks/
         self.parent = parent
         self.parents = [parent] if parent else []
-
-    def get_display_text(self):
-        """Bitcoin-specific text display."""
-        if self.parent:
-            return f"{self.text}\nParent: {self.parent[:6]}..."
-        else:
-            return f"{self.text}\n(Genesis)"
 
     def get_outline_properties(self):
         """Bitcoin-specific orange outline."""
@@ -161,9 +127,9 @@ class GhostdagBlock(Block):
     Visual representation only - consensus logic handled by consensus/blocks/ghostdag/
     """
 
-    def __init__(self, x, y, sprite_id, grid_size, text="Block", color=(0, 0, 255),
+    def __init__(self, x, y, sprite_id, grid_size, color=(0, 0, 255),
                  parents: list = None, logical_block=None, **kwargs):
-        super().__init__(x, y, sprite_id, grid_size, text, color)
+        super().__init__(x, y, sprite_id, grid_size, color)
 
         # Store parent info for visual display only
         self.parents = parents or []
@@ -171,17 +137,6 @@ class GhostdagBlock(Block):
         # Reference to logical block for getting consensus data
         # This is set by VisualBlock wrapper in the new system
         self.logical_block = logical_block
-
-    def get_display_text(self):
-        """GHOSTDAG-specific text display - get data from logical block if available."""
-        if (self.logical_block and
-                hasattr(self.logical_block, 'consensus_data') and
-                self.logical_block.consensus_data and
-                hasattr(self.logical_block.consensus_data, 'blue_score')):
-            return f"{self.text}\nBS:{self.logical_block.consensus_data.blue_score}"
-        else:
-            # Fallback display when no logical block is connected
-            return f"{self.text}\nBS:?"
 
     def get_outline_properties(self):
         """GHOSTDAG-specific blue outline."""

@@ -18,6 +18,7 @@ class AnimationController:
             AnimationType.CAMERA_MOVE: self._handle_camera_move,
             AnimationType.WAIT: self._handle_wait,
             AnimationType.RELATIVE_MOVE: self._handle_relative_move,
+            AnimationType.LABEL_CHANGE: self._handle_label_change,
         }
 
     def play_simultaneous(self, animations, start_frame=None):
@@ -107,8 +108,8 @@ class AnimationController:
         """Update debugging information for an animation."""
         if animation.state.debug_start_frame is None:
             animation.state.debug_start_frame = animation.start_frame
-            print(
-                f"Animation {animation.sprite_id}:{animation.type.value} started at frame {animation.state.debug_start_frame}")
+#            print(
+#                f"Animation {animation.sprite_id}:{animation.type.value} started at frame {animation.state.debug_start_frame}")
 
         animation.state.debug_frame_count += 1
         animation.state.debug_end_frame = current_frame
@@ -123,12 +124,12 @@ class AnimationController:
         sprite_id = animation.sprite_id
         anim_type = animation.type.value
 
-        print(f"Animation {sprite_id}:{anim_type} completed:")
-        print(f"  Expected frames: {expected_frames}")
-        print(f"  Actual frames: {actual_frames}")
-        print(f"  Start frame: {animation.state.debug_start_frame}")
-        print(f"  End frame: {animation.state.debug_end_frame}")
-        print(f"  Final progress: {progress}")
+#        print(f"Animation {sprite_id}:{anim_type} completed:")
+#        print(f"  Expected frames: {expected_frames}")
+#        print(f"  Actual frames: {actual_frames}")
+#        print(f"  Start frame: {animation.state.debug_start_frame}")
+#        print(f"  End frame: {animation.state.debug_end_frame}")
+#        print(f"  Final progress: {progress}")
 
         # Animation Handler Methods - Only consolidated animation types
 
@@ -231,6 +232,21 @@ class AnimationController:
     def _handle_wait(self, animation: Animation, sprite: Any, is_complete: bool, progress: float):
         """Handle wait animations - do nothing, just consume time"""
         pass  # Wait animations don't need to do anything
+
+    def _handle_label_change(self, animation: Animation, sprite: Any, is_complete: bool, progress: float) -> None:
+        """Handle label change at completion"""
+        if is_complete:
+            # Update the logical block's label property
+            if hasattr(sprite.logical_block, 'label'):
+                sprite.logical_block.label = animation.new_label
+            else:
+                # Store in metadata if no direct label property exists
+                if not hasattr(sprite.logical_block, 'metadata'):
+                    sprite.logical_block.metadata = {}
+                sprite.logical_block.metadata['label'] = animation.new_label
+
+                # Force re-render
+            sprite.render()
 
     def _interpolate_color(self, start_color, target_color, progress):
         """Interpolate between two colors based on progress."""

@@ -24,6 +24,7 @@ __all__ = [
     'FadeToAnimation',
     'WaitAnimation',
     'RelativeMoveAnimation',
+    'LabelChangeAnimation',
 
     # Group classes and functions
     'TimelineEvent',

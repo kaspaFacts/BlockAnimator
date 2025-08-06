@@ -35,7 +35,6 @@ class BlockDAG:
     def add_sprite(self, sprite_id, grid_x, grid_y, consensus_type="basic", **kwargs):
         """Add a sprite at grid coordinates with specified consensus type using factory pattern."""
         pixel_x, pixel_y = self.scene.coords.grid_to_pixel(grid_x, grid_y)
-        text = kwargs.pop('text', sprite_id)
         parents = kwargs.pop('parents', None)
 
         # Create logical block using factory
@@ -44,23 +43,56 @@ class BlockDAG:
                 consensus_type, sprite_id, parents, **kwargs
             )
 
+            # Let the logical block determine its own visual properties
+            visual_kwargs = {}
+            if hasattr(logical_block, 'get_visual_properties'):
+                visual_kwargs = logical_block.get_visual_properties()
+
+                # Merge with any explicitly passed kwargs (explicit overrides logical block)
+            visual_kwargs.update({k: v for k, v in kwargs.items() if k in ['color']})
+
             # Create visual representation using VisualBlock
             sprite = VisualBlock(
                 pixel_x, pixel_y,
                 logical_block,
                 self.scene.coords.grid_size,
-                **kwargs
+                **visual_kwargs
             )
         else:
             # Fallback to basic Block for unsupported types
+            text = kwargs.pop('text', sprite_id)  # Only extract text when needed for fallback
             sprite = Block(pixel_x, pixel_y, sprite_id, self.scene.coords.grid_size, text, **kwargs)
 
+            # Set grid positioning
         sprite.grid_x = grid_x
         sprite.grid_y = grid_y
 
+        # Register sprite in management systems
         self.sprite_registry[sprite_id] = sprite
         self.sprites.add(sprite, layer=self.BLOCK_LAYER)
+
         return sprite
+
+    def _get_connection_style(self, sprite, parent_id):
+        """Helper method to determine connection styling based on consensus data."""
+        connection_kwargs = {}
+
+        if (hasattr(sprite, 'logical_block') and
+                sprite.logical_block.consensus_type == "ghostdag" and
+                hasattr(sprite.logical_block, 'consensus_data') and
+                sprite.logical_block.consensus_data):
+
+            logical_block = sprite.logical_block
+            if sprite.logical_block.consensus_data.selected_parent == parent_id:
+                connection_kwargs['color'] = (0, 0, 255)  # Blue for selected parent
+                connection_kwargs['selected_parent'] = True
+            else:
+                connection_kwargs['color'] = (255, 255, 255)  # White for other parents
+        else:
+            # Default connection color for non-GHOSTDAG
+            connection_kwargs['color'] = (255, 255, 255)  # White
+
+        return connection_kwargs
 
     def add_connection(self, connection_id, start_block_id, end_block_id, **kwargs):
         """Enhanced connection creation with consensus-aware logic."""
@@ -114,6 +146,36 @@ class BlockDAG:
             # Check if parent is in the blue portion of the mergeset
         return parent_id in consensus_data.mergeset_blues
 
+    def _create_parent_connections(self, sprite, parents):
+        """Create parent connections with consolidated styling logic."""
+        animations = []
+
+        for parent in parents:
+            parent_id = parent.parent_id if isinstance(parent, StyledParent) else parent
+            if parent_id in self.blocks:
+                connection_id = f"{parent_id}_to_{sprite.sprite_id}"
+
+                # Get connection styling using helper method
+                connection_kwargs = {}
+                if isinstance(parent, StyledParent):
+                    if parent.color:
+                        connection_kwargs['color'] = parent.color
+                    if parent.selected_parent:
+                        connection_kwargs['selected_parent'] = True
+                else:
+                    # Use consensus-aware styling
+                    connection_kwargs = self._get_connection_style(sprite, parent_id)
+
+                self.add_connection(connection_id, sprite.sprite_id, parent_id, **connection_kwargs)
+
+                # Add connection fade-in animation
+                animations.append(FadeToAnimation(
+                    sprite_id=connection_id,
+                    target_alpha=255
+                ))
+
+        return animations
+
     def add(self, block_id, grid_pos, label=None, parents=None, **kwargs):
         """Add a block at grid position with automatic parent connections."""
         grid_x, grid_y = grid_pos
@@ -141,42 +203,12 @@ class BlockDAG:
             duration=1.0
         )]
 
-        # Add parent connections that fade in simultaneously
+        # Add parent connections using consolidated helper method
         if parents:
-            for parent in parents:
-                parent_id = parent.parent_id if isinstance(parent, StyledParent) else parent
-                if parent_id in self.blocks:
-                    connection_id = f"{parent_id}_to_{block_id}"
+            connection_animations = self._create_parent_connections(sprite, parents)
+            animations.extend(connection_animations)
 
-                    # Create connection with custom properties
-                    connection_kwargs = {}
-                    if isinstance(parent, StyledParent):
-                        if parent.color:
-                            connection_kwargs['color'] = parent.color
-                        if parent.selected_parent:
-                            connection_kwargs['selected_parent'] = True
-
-                            # Set color based on consensus data if available
-                    if (hasattr(sprite, 'logical_block') and
-                            sprite.logical_block.consensus_type == "ghostdag" and
-                            hasattr(sprite.logical_block, 'consensus_data') and
-                            sprite.logical_block.consensus_data and
-                            sprite.logical_block.consensus_data.selected_parent == parent_id):
-                        connection_kwargs['color'] = (0, 0, 255)  # Blue for selected parent
-                    else:
-                        # Only override color if not already set by Parent object
-                        if 'color' not in connection_kwargs:
-                            connection_kwargs['color'] = (255, 255, 255)  # White for other parents
-
-                    self.add_connection(connection_id, block_id, parent_id, **connection_kwargs)
-
-                    # Add connection fade-in animation using FadeToAnimation
-                    animations.append(FadeToAnimation(
-                        sprite_id=connection_id,
-                        target_alpha=255
-                    ))
-
-                    # After successfully adding the block, update history
+            # After successfully adding the block, update history
         self._update_history()
 
         return animations
@@ -206,24 +238,15 @@ class BlockDAG:
                 if parent_id in self.blocks:
                     connection_id = f"{parent_id}_to_{block_id}"
 
-                    # Initialize connection_kwargs here
+                    # Use consolidated styling logic
                     connection_kwargs = {}
                     if isinstance(parent, StyledParent):
                         if parent.color:
                             connection_kwargs['color'] = parent.color
                         if parent.selected_parent:
                             connection_kwargs['selected_parent'] = True
-
-                            # Set color based on consensus data if available
-                    if (hasattr(sprite, 'logical_block') and
-                            sprite.logical_block.consensus_type == "ghostdag" and
-                            hasattr(sprite.logical_block, 'consensus_data') and
-                            sprite.logical_block.consensus_data and
-                            sprite.logical_block.consensus_data.selected_parent == parent_id):
-                        connection_kwargs['color'] = (0, 0, 255)  # Blue for selected parent
                     else:
-                        if 'color' not in connection_kwargs:
-                            connection_kwargs['color'] = (255, 255, 255)  # White for other parents
+                        connection_kwargs = self._get_connection_style(sprite, parent_id)
 
                     self.add_connection(connection_id, block_id, parent_id, **connection_kwargs)
                     # Set connection to invisible initially

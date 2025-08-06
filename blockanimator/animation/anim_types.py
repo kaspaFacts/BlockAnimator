@@ -12,6 +12,7 @@ class AnimationType(Enum):
     CAMERA_MOVE = "camera_move"
     WAIT = "wait"
     RELATIVE_MOVE = "relative_move"
+    LABEL_CHANGE = "label_change"
 
 
 @dataclass
@@ -73,3 +74,8 @@ class RelativeMoveAnimation(Animation):
     offset: tuple = (0.0, 0.0)  # Store offset instead of absolute position
     target_grid_x: Optional[float] = None  # Will be calculated at execution time
     target_grid_y: Optional[float] = None
+
+@dataclass
+class LabelChangeAnimation(Animation):
+    type: AnimationType = field(default=AnimationType.LABEL_CHANGE, init=False)
+    new_label: str = ""

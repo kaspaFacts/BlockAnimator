@@ -3,7 +3,7 @@
 from typing import List, Dict, Any
 import pygame
 from ..animation import Animation, FadeToAnimation, MoveToAnimation
-from ..sprites.block import Block, GhostdagBlock, BitcoinBlock
+from ..consensus.visual_block import VisualBlock
 from ..sprites.connection import Connection
 from ..consensus.dags.consensus_dags import ConsensusDAG
 from ..consensus.constants import LayerConstants
@@ -105,28 +105,11 @@ class VisualDAGRenderer:
         grid_x, grid_y = grid_pos
         pixel_x, pixel_y = self.scene.coords.grid_to_pixel(grid_x, grid_y)
 
-        # Get display text from logical block
-        text = logical_block.get_display_info()
-
-        # Create consensus-specific visual block
-        if logical_block.consensus_type == "bitcoin":
-            sprite = BitcoinBlock(
-                pixel_x, pixel_y, logical_block.block_id,
-                self.scene.coords.grid_size, text,
-                parent=logical_block.parents[0] if logical_block.parents else None
-            )
-        elif logical_block.consensus_type == "ghostdag":
-            sprite = GhostdagBlock(
-                pixel_x, pixel_y, logical_block.block_id,
-                self.scene.coords.grid_size, text,
-                parents=logical_block.parents
-            )
-        else:
-            # Default to basic block
-            sprite = Block(
-                pixel_x, pixel_y, logical_block.block_id,
-                self.scene.coords.grid_size, text
-            )
+        # Create VisualBlock for all consensus types
+        sprite = VisualBlock(
+            pixel_x, pixel_y, logical_block,
+            self.scene.coords.grid_size, color=(0, 0, 255)
+        )
 
         sprite.grid_x = grid_x
         sprite.grid_y = grid_y

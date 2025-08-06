@@ -3,6 +3,7 @@
 import pygame
 from blockanimator.animation import BlockAnimationProxy
 
+
 class VisualBlock(pygame.sprite.Sprite):
     """Pure visual representation - references logical block"""
 
@@ -35,8 +36,10 @@ class VisualBlock(pygame.sprite.Sprite):
         # Animation proxy support
         self._animate = None
 
-        # Initialize font
+        # Initialize font once for better performance
         pygame.font.init()
+        font_size = max(int(grid_size * 2), 8)
+        self.font = pygame.font.Font(None, font_size)
 
         self.render()
 
@@ -63,37 +66,20 @@ class VisualBlock(pygame.sprite.Sprite):
         outline_width = max(int(self.grid_size * 0.25), 1)
         pygame.draw.rect(self.image, outline_color, block_rect, outline_width)
 
-        # Render text from logical block
-        display_text = self.get_display_text()
+        # Simply get and render text - no change detection needed
+        display_text = self.logical_block.get_display_info()
         self.render_text(display_text, block_rect)
-
-        # Apply alpha
         self.image.set_alpha(self.alpha)
 
     def render_text(self, display_text, block_rect):
-        """Render text on the block"""
-        # Initialize font
-        font_size = max(int(self.grid_size * 2), 8)
-        font = pygame.font.Font(None, font_size)
-
+        """Render text on the block using pre-initialized font"""
         text_lines = display_text.split('\n')
         for i, line in enumerate(text_lines):
-            text_surface = font.render(line, True, (255, 255, 255))
+            text_surface = self.font.render(line, True, (255, 255, 255))
             text_rect = text_surface.get_rect(
                 center=(block_rect.centerx, block_rect.centery + i * 15)
             )
             self.image.blit(text_surface, text_rect)
-
-    def get_display_text(self):
-        """Get text from logical block data"""
-        if self.logical_block.consensus_type == "ghostdag":
-            return f"{self.logical_block.block_id}\nBS:{self.logical_block.consensus_data.blue_score}"
-        elif self.logical_block.consensus_type == "bitcoin":
-            parent = getattr(self.logical_block, 'parent', None)
-            if parent:
-                return f"{self.logical_block.block_id}\nParent: {parent[:6]}..."
-            return f"{self.logical_block.block_id}\n(Genesis)"
-        return self.logical_block.block_id
 
     def set_alpha(self, alpha):
         """Set sprite alpha"""

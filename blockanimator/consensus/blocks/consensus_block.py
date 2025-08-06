@@ -42,6 +42,13 @@ class ConsensusBlock(Protocol):
     def has_parent(self, parent_id: str) -> bool:
         return parent_id in self.parents
 
+    def set_label(self, new_label: str) -> None:
+        """Set block label (optional - not all consensus types support this)."""
+        ...
+
+    def change_label(self, new_label: str, delay: float = 0.0, duration: float = 0.1):
+        """Create label change animation (optional)."""
+        ...
 
 class ConsensusBlockBuilder:
     """Builder for creating consensus blocks with normalized interface."""
