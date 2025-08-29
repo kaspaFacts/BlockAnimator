@@ -17,7 +17,14 @@ from .animation import (
     sequential,
     BlockAnimationProxy,
     Timeline,
-    AnimationOrchestrator
+    AnimationOrchestrator,
+    FadeToAnimation,
+    MoveToAnimation,
+    ColorChangeAnimation,
+    RelativeMoveAnimation,
+    WaitAnimation,
+    CameraMoveAnimation,
+    LabelChangeAnimation
 )
 from .utils import DisplayConfig
 
@@ -46,6 +53,9 @@ __all__ = [
     # Animation system
     'AnimationController', 'simultaneous', 'sequential',
     'BlockAnimationProxy', 'Timeline', 'AnimationOrchestrator',
+    'FadeToAnimation', 'MoveToAnimation', 'ColorChangeAnimation',
+    'RelativeMoveAnimation', 'WaitAnimation', 'CameraMoveAnimation',
+    'LabelChangeAnimation',
 
     # Utils
     'DisplayConfig'

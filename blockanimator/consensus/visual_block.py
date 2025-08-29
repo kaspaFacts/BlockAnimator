@@ -45,10 +45,8 @@ class VisualBlock(pygame.sprite.Sprite):
 
     @property
     def animate(self):
-        """Return an animation proxy for this block."""
-        if self._animate is None:
-            self._animate = BlockAnimationProxy(self)
-        return self._animate
+        """Return a new animation proxy for this block."""
+        return BlockAnimationProxy(self)
 
     def render(self):
         """Render the block with visual properties"""

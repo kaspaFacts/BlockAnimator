@@ -26,23 +26,34 @@ class AnimationController:
         if start_frame is None:
             start_frame = self.next_available_frame
 
+        print(
+            f"[CONTROLLER] play_simultaneous called with {len(animations) if isinstance(animations, list) else 1} animations at frame {start_frame}")
+
         if not isinstance(animations, list):
             animations = [animations]
 
             # Filter out None animations
         valid_animations = [anim for anim in animations if anim is not None]
+        print(f"[CONTROLLER] {len(valid_animations)} valid animations after filtering")
 
         if not valid_animations:
             return self.next_available_frame
 
         max_duration = 0
-        for animation in valid_animations:
+        for i, animation in enumerate(valid_animations):
             animation.start_frame = start_frame + self.duration_to_frames(animation.delay)
             animation.duration_frames = self.duration_to_frames(animation.duration)
-            max_duration = max(max_duration, animation.duration_frames + self.duration_to_frames(animation.delay))
+            total_duration = animation.duration_frames + self.duration_to_frames(animation.delay)
+            max_duration = max(max_duration, total_duration)
+
+            print(f"  Animation {i}: {animation.sprite_id} {animation.type.value}")
+            print(f"    duration={animation.duration}s -> {animation.duration_frames} frames")
+            print(f"    start_frame={animation.start_frame}, total_duration={total_duration}")
+
             self.add_animation(animation)
 
         end_frame = start_frame + max_duration
+        print(f"[CONTROLLER] Simultaneous group: start={start_frame}, max_duration={max_duration}, end={end_frame}")
         self.next_available_frame = end_frame
         return end_frame
 
@@ -51,8 +62,16 @@ class AnimationController:
         current_frame = self.next_available_frame
 
         for group in animation_groups:
-            # Each group plays simultaneously, but groups are sequential
-            end_frame = self.play_simultaneous(group, current_frame)
+            # Extract animations from this specific group
+            if hasattr(group, 'animations'):
+                group_animations = group.animations
+            elif isinstance(group, list):
+                group_animations = group
+            else:
+                group_animations = [group]
+
+                # Each group plays simultaneously, but groups are sequential
+            end_frame = self.play_simultaneous(group_animations, current_frame)
             current_frame = end_frame
 
         return current_frame
@@ -63,6 +82,8 @@ class AnimationController:
 
     def duration_to_frames(self, duration_seconds):
         """Convert duration in seconds to exact frame count."""
+        if duration_seconds == 0:
+            return 1  # Execute in exactly one frame
         return round(duration_seconds * self.fps)
 
     def update_sprites(self, sprites: Dict[str, Any], current_frame: int) -> None:
@@ -83,6 +104,9 @@ class AnimationController:
         """Calculate animation progress based on frame numbers."""
         start_frame = animation.start_frame
         duration_frames = animation.duration_frames
+
+        if duration_frames <= 1:  # Single frame animation
+            return 1.0 if current_frame >= start_frame else 0.0
 
         if current_frame >= start_frame + duration_frames:
             return 1.0
@@ -169,6 +193,7 @@ class AnimationController:
         """Handle fade-to with captured state."""
         if animation.state.actual_start_alpha is None:
             animation.state.actual_start_alpha = sprite.alpha
+            print(f"[FADE] {animation.sprite_id}: Starting fade from {sprite.alpha} to {animation.target_alpha}")
             # Add visibility handling for invisible sprites fading to visible
             if sprite.alpha == 0 and animation.target_alpha > 0 and not sprite.visible:
                 sprite.set_visible(True)
@@ -177,8 +202,10 @@ class AnimationController:
         target_alpha = animation.target_alpha
 
         if is_complete:
+            print(f"[FADE] {animation.sprite_id}: COMPLETING fade to {target_alpha}")
             sprite.set_alpha(target_alpha)
             if target_alpha == 0:
+                print(f"[FADE] {animation.sprite_id}: Setting invisible due to alpha=0")
                 sprite.set_visible(False)  # Hide when fully transparent
         else:
             current_alpha = int(start_alpha + (target_alpha - start_alpha) * progress)

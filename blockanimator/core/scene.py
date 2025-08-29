@@ -14,12 +14,13 @@ class Scene:
         # Core setup using display config
         self.width, self.height, self.screen = DisplayConfig.setup(resolution)
         self.fps = fps
+        self._field_height = field_height
 
         # Initialize subsystems
         self.coords = CoordinateSystem(self.width, self.height, field_height=field_height)
         self.animation_controller = AnimationController(fps=self.fps)
         self.timeline = Timeline(fps)
-        self.camera = CameraController(self)
+        self.camera = CameraController(self, field_height=field_height)
         self.animation_orchestrator = AnimationOrchestrator(self.animation_controller, self.timeline)
         self.dag_manager = ConsensusManager()
         self.render_manager = RenderManager()
@@ -73,3 +74,14 @@ class Scene:
     @property
     def timeline_events(self):
         return self.timeline.timeline_events
+
+    @property
+    def field_height(self):
+        """Field width in grid units."""
+        return self._field_height
+
+    @property
+    def field_width(self):
+        """Field width in grid units."""
+        aspect_ratio = self.width / self.height
+        return self.field_height * aspect_ratio

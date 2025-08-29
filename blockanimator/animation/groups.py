@@ -20,6 +20,7 @@ class SequentialAnimations:
     """Wrapper for sequential animation groups"""
 
     def __init__(self, *animation_groups):
+        # Store groups as-is, don't flatten them
         self.animation_groups = list(animation_groups)
         self.animation_type = 'sequential'
 

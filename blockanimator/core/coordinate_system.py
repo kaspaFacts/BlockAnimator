@@ -3,7 +3,7 @@
 class CoordinateSystem:
     """Converts grid coordinates to screen pixels with camera support."""
 
-    def __init__(self, screen_width, screen_height, field_height=50):
+    def __init__(self, screen_width, screen_height, field_height):
         self.screen_width = screen_width
         self.screen_height = screen_height
 
